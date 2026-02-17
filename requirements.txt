@@ -1,0 +1,34 @@
+# Core scientific stack
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+
+# Visualization
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# Machine learning utilities
+scikit-learn==1.4.2
+tqdm==4.66.4
+
+# PyTorch
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+
+# PyTorch Geometric
+torch-geometric==2.5.3
+
+# Graph + spatial processing
+networkx==3.3
+geopandas==0.14.4
+shapely==2.0.4
+pyproj==3.6.1
+fiona==1.9.6
+
+# Configuration + logging
+pyyaml==6.0.1
+
+# Notebook support
+jupyter==1.0.0
+ipykernel==6.29.4
