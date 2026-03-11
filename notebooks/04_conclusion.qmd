@@ -1,18 +1,39 @@
-# Conclusion:
+# Conclusion
+
+## Project Contributions
 
 
-## Limitations:
-
-## Future Work:
+## Limitations
 
 
-## References:
-1) 
+## Future Work
 
-## Appendix:
+
+# References
+
+1) Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry. (2024). A validity assessment of the Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry Social Vulnerability Index (CDC/ATSDR SVI). U.S. Department of Health and Human Services. 
+
+2) Flanagan, B. E., Gregory, E. W., Hallisey, E. J., Heitgerd, J. L., & Lewis, B. (2011). A social vulnerability index for disaster management. Journal of Homeland Security and Emergency Management, 8(1), Article 3.
+
+3) Kalaycioglu, O., Akhanli, S. E., Mentese, E. Y., Kalaycioglu, M., & Kalaycioglu, S. (n.d.). Using machine learning algorithms to identify predictors of social vulnerability in the event of a hazard: Istanbul case study. 
+
+4) Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC’s SVI and SoVI® [Master’s thesis, Lund University]. 
+
+5) Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
+
+6) Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
+
+7) Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
+ 
+
+# Appendix
+
 1) Github Repository: https://github.com/AnhJoe/Real-Time_IoT_2022_Quantized_Auto_Encoder
 
-## Team Contributions:
+2) U.S. SVI Publications and Use Cases / SUIT Database: https://www.atsdr.cdc.gov/place-health/php/svi/svi-publications.html
+
+
+# Team Contributions
 
 Joe Nguyen: 
 

@@ -1,6 +1,11 @@
+# =========================
 # Python
+# =========================
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.so
 *.egg-info/
 dist/
 build/
@@ -8,32 +13,60 @@ build/
 venv/
 .env
 
+# =========================
 # Jupyter
+# =========================
 .ipynb_checkpoints/
 
+# Jupyter notebook generated assets
+*_files/
+
+# =========================
 # VS Code
+# =========================
 .vscode/
 
+# =========================
 # Data
+# =========================
 data/raw/
 data/processed/
 *.csv
 
-# Artifacts
+# =========================
+# Model Artifacts
+# =========================
 data/artifacts/
 *.h5
 *.keras
 *.pt
+*.pth
 *.pkl
+*.joblib
+*.onnx
 
-# Quarto / render outputs
-# outputs/reports/
-outputs/figures/
-outputs/tables/
+# =========================
+# Quarto / Render Outputs
+# =========================
 .quarto/
+.quarto_cache/
 **/*.quarto_ipynb
 
+# Quarto / notebook figure outputs
+notebooks/*_files/
+notebooks/*_files/figure-pdf/
+notebooks/*_files/figure-html/
+
+# Project output folders
+outputs/figures/
+outputs/tables/
+
+# Large generated reports
+outputs/reports/*.pdf
+
+# =========================
 # LaTeX
+# =========================
 *.aux
 *.bbl
 *.blg
@@ -47,8 +80,26 @@ outputs/tables/
 *.synctex.gz
 *.tex
 
+# =========================
+# Large files
+# =========================
+*.pdf
+*.zip
+*.tar
+*.gz
+
+# =========================
 # OS
+# =========================
 .DS_Store
 Thumbs.db
 
+# =========================
+# Conda
+# =========================
 
+conda-meta/
+.envs/
+envs/
+*.conda
+*.conda-lock
