@@ -3,27 +3,29 @@
 
 # Introduction
 
-Social vulnerability reflects how community-level social and demographic conditions influence the ability of populations to prepare for, withstand, and recover from hazards. In disaster management and public health, the CDC/ATSDR Social Vulnerability Index (SVI) has become an important tool for identifying areas where communities may face disproportionate risk due to factors such as socioeconomic disadvantage, household composition, minority status, housing conditions, and transportation access (Flanagan et al., 2011; Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry [CDC/ATSDR], 2024). Prior work suggests that SVI is especially useful for preparedness, response, and recovery planning, while also highlighting that vulnerability is multidimensional, geographically uneven, and not always fully captured by non-spatial tabular modeling approaches alone (CDC/ATSDR, 2024; Tarling, 2017).
+Social vulnerability reflects how community-level social and demographic conditions influence the ability of populations to prepare for, withstand, and recover from hazards. In disaster management and public health, the Centers for Disease Control and Prevention / Agency for Toxic Substances and Disease Registry Social Vulnerability Index (SVI) has become an important tool for identifying areas where communities may face disproportionate risk due to factors such as socioeconomic disadvantage, household composition, minority status, housing conditions, and transportation access (Flanagan et al., 2011; CDC/ATSDR, 2024). The index was designed to support emergency planning and resource allocation by identifying communities that may require additional assistance before, during, and after disasters (Flanagan et al., 2011). Recent evaluations of the index have further shown that SVI performs particularly well in preparedness, response, and recovery contexts for moderate and severe hazards, although its predictive ability is more limited in sudden extreme events where physical exposure may dominate outcomes (CDC/ATSDR, 2024).
 
-Motivated by these observations, this study examines SVI within a regression framework that integrates deep learning and spatial graph-based methods to model how social vulnerability varies across geographically connected communities. Rather than treating counties as independent observations, counties are represented as nodes within a geographic graph in which neighboring regions are connected through spatial adjacency relationships. This formulation allows the analysis to incorporate neighborhood context when predicting vulnerability. By comparing a tabular deep learning baseline with graph neural network (GNN) and graph convolutional network (GCN) models, the study investigates whether explicitly modeling spatial structure improves county-level SVI prediction beyond conventional non-spatial approaches.
+The SVI is constructed using county-level socioeconomic indicators derived from the U.S. Census Bureau American Community Survey. These indicators are aggregated into four vulnerability themes—Socioeconomic Status, Household Characteristics, Racial and Ethnic Minority Status, and Housing Type and Transportation—and percentile ranks are then calculated to produce the theme scores used in the index (Flanagan et al., 2011; CDC/ATSDR, 2024). Because these percentile scores are derived directly from the underlying indicators, predicting SVI theme rankings using the EP_* indicators can be interpreted as learning the transformation that maps socioeconomic conditions to vulnerability percentiles rather than identifying entirely new predictors of vulnerability. From this perspective, the modeling task focuses on learning and approximating the SVI scoring structure, providing insight into **how different machine learning architectures capture the nonlinear relationships embedded within the index**.
+
+Motivated by this perspective, the present study models SVI within a regression framework that integrates deep learning and spatial graph-based methods to examine how vulnerability patterns vary across geographically connected communities. Counties are represented as nodes within a geographic graph in which neighboring regions are connected through spatial adjacency relationships, allowing the analysis to incorporate spatial neighborhood context when predicting vulnerability scores. By comparing a tabular deep learning baseline **(Multilayer Perceptron (MLP))** with **Graph Neural Network (GNN)** and **Graph Convolutional Network (GCN)** models, the study investigates whether explicitly modeling spatial structure improves county-level SVI prediction beyond conventional non-spatial approaches. In doing so, the study explores how neural architectures and spatial relational learning can approximate and potentially enhance the representation of vulnerability patterns embedded in the CDC/ATSDR SVI framework.
 
 ## Project Objectives
 
-To guide the scope of the study, the following objectives are defined to progressively move from tabular deep learning models to spatial graph-based learning methods. These objectives aim to evaluate not only predictive performance, but also how incorporating spatial structure influences the ability to model social vulnerability across geographic regions.
+To guide the scope of the study, the following objectives are defined to progressively move from tabular deep learning models to spatial graph-based learning methods. Because the Social Vulnerability Index (SVI) percentile scores are derived from the same underlying socioeconomic indicators used as predictors in this study, the modeling task is interpreted as **learning and approximating the transformation that maps vulnerability indicators to SVI theme percentiles**. The objectives therefore focus on evaluating how different machine learning architectures capture this mapping and whether incorporating spatial structure improves the representation of vulnerability patterns across geographic regions.
 
-1) Conduct **exploratory data analysis (EDA)** to examine the distribution, scale, and relationships among the Social Vulnerability Index (SVI) features, including feature distributions, transformations, and spatial patterns across counties in order to better understand the structure of the dataset prior to model development.
-   
-2) Establish a deep learning baseline for tabular prediction by training a **multilayer perceptron (MLP)** to model nonlinear relationships among socioeconomic, demographic, and housing-related features associated with the Social Vulnerability Index (SVI).
+1) Conduct **exploratory data analysis (EDA)** to examine the distribution, scale, and relationships among the Social Vulnerability Index (SVI) indicators, including feature distributions, transformations, and spatial patterns across counties in order to better understand the statistical and geographic structure of the dataset prior to model development.
+
+2) Establish a deep learning baseline for tabular prediction by training a **Multilayer Perceptron (MLP)** to model nonlinear relationships between the EP_* socioeconomic indicators and the SVI theme percentile scores, providing a benchmark for how well neural networks can approximate the SVI scoring transformation using tabular inputs alone.
 
 3) Incorporate spatial structure into prediction by representing **counties as nodes in a geographic graph** constructed from spatial adjacency relationships, enabling neighboring communities to be modeled as relationally connected rather than independent observations.
 
-4) Evaluate graph neural network models for SVI regression by implementing a general **graph neural network (GNN)** architecture that propagates information across neighboring counties to capture potential spatial dependence in vulnerability patterns.
+4) Evaluate graph neural network models for SVI regression by implementing a general **Graph Neural Network (GNN)** architecture that propagates information across neighboring counties to capture potential spatial dependence in vulnerability patterns.
 
 5) Assess the impact of graph convolutional learning by implementing a **Graph Convolutional Network (GCN)** to determine whether localized neighborhood aggregation improves predictive performance over both tabular and general graph neural models.
 
-6) Compare tabular and graph-based deep learning approaches within a **unified regression framework** to determine whether explicitly modeling spatial relationships improves county-level SVI prediction.
+6) Compare tabular and graph-based deep learning approaches within a **unified regression framework** to evaluate how model architecture and spatial information influence the ability to approximate county-level SVI percentile scores.
 
-7) Investigate the role of spatial context in social vulnerability by examining whether geographic connectivity between counties provides meaningful predictive signal beyond what is captured by socioeconomic and demographic features alone.
+7) Investigate the role of spatial context in social vulnerability modeling by examining whether geographic connectivity between counties provides meaningful predictive signal beyond what is captured by the underlying socioeconomic and demographic indicators alone.
 
 ## Related Work
 
@@ -37,7 +39,11 @@ Despite these advances, an important gap remains in the literature. Existing mac
 
 # Data Summary
 
-The county-level 2022 SVI dataset is a relative vulnerability dataset designed to identify counties that may be more vulnerable before, during, and after hazardous events. In the documentation, SVI is defined through a pipeline of variable types: raw estimate fields (`E_`), margin-of-error fields (`M_`), derived percentage fields (`EP_`), percentage MOE fields (`MP_`), percentile-ranked fields (`EPL_`), theme sums (`SPL_`), theme percentile rankings (`RPL_THEME1 through RPL_THEME4`), and the overall percentile ranking (`RPL_THEMES`). Higher percentile values indicate greater relative social vulnerability.
+The county-level 2022 Social Vulnerability Index (SVI) dataset is a relative vulnerability dataset designed to identify counties that may be more vulnerable before, during, and after hazardous events. The index was developed by the Centers for Disease Control and Prevention and the Agency for Toxic Substances and Disease Registry to support disaster preparedness, response planning, and public health resource allocation (Flanagan et al., 2011; CDC/ATSDR, 2024). The dataset integrates socioeconomic indicators derived primarily from the U.S. Census Bureau American Community Survey and converts them into percentile-based vulnerability rankings across U.S. counties.
+
+In the official documentation, SVI variables are organized through a structured pipeline of derived fields. These include raw estimate fields (E_), margin-of-error fields (M_), derived percentage fields (EP_), percentage margin-of-error fields (MP_), percentile-ranked indicator fields (EPL_), theme sums (SPL_), theme percentile rankings (RPL_THEME1 through RPL_THEME4), and the overall percentile ranking (RPL_THEMES). Higher percentile values correspond to **greater relative social vulnerability compared with other counties**.
+
+Because the percentile rankings are computed directly from the underlying EP_* indicators, the modeling task in this study focuses on **learning the transformation that maps socioeconomic indicators to SVI theme percentile scores rather than discovering entirely new vulnerability predictors**. The machine learning models therefore approximate the functional relationship embedded within the official SVI scoring framework while evaluating how different model architectures capture these relationships.
 
 ## Data Sources
 
@@ -46,10 +52,12 @@ The county-level 2022 SVI dataset is a relative vulnerability dataset designed t
 2. US County 2022 SVI dataset documentation: https://svi.cdc.gov/map25/data/docs/SVI2022Documentation_ZCTA.pdf 
 
 3. US County 2022 Tiger Line: https://catalog.data.gov/dataset/tiger-line-shapefile-2022-nation-u-s-county-and-equivalent-entities/resource/1eb8657f-0109-4712-a714-32a569edc1ad?
-   
+
+The TIGER/Line geographic data provide county boundary geometries used to construct spatial adjacency relationships for the graph-based models developed later in the study.
+
 ## Geographic and Base Reference Fields
 
-At the county level, the dataset includes geographic identifier and reference fields that support merging, filtering, and mapping. These include:
+At the county level, the dataset includes geographic identifiers and reference attributes used for data integration, filtering, and mapping. Key fields include:
 
 - ST: state-level FIPS code
 
@@ -67,7 +75,7 @@ At the county level, the dataset includes geographic identifier and reference fi
 
 - AREA_SQMI: area in square miles
 
-The data dictionary also includes core population and housing reference counts that are used in percentage calculations, including:
+The dataset also includes population and housing reference counts used in percentage calculations:
 
 - E_TOTPOP / M_TOTPOP: total population estimate and MOE
 
@@ -75,9 +83,11 @@ The data dictionary also includes core population and housing reference counts t
 
 - E_HH / M_HH: households estimate and MOE
 
+These counts provide the denominators used when computing the EP_* percentage indicators.
+
 ## Core SVI Feature Set: 16 Social Vulnerability Variables
 
-The main predictive feature set in SVI is the 16-variable framework grouped into four themes. These are the most important variables because they form the basis of the official rankings.
+The primary predictive feature set consists of 16 socioeconomic indicators, organized into four themes within the official SVI framework. These indicators are expressed as percentages (EP_* variables) derived from underlying American Community Survey estimates.
 
   1) Theme 1: Socioeconomic Status
 
@@ -129,11 +139,15 @@ The main predictive feature set in SVI is the 16-variable framework grouped into
 
 ## Margin-of-Error Fields
 
-For each estimate and many derived percentages, the dataset also includes margin-of-error fields. The fields beginning with M_ are MOEs for estimates and fields beginning with MP_ are MOEs for percentages. These are important because ACS-based measures can have substantial uncertainty, especially for smaller populations. Examples include M_POV150, M_UNEMP, M_AGE65, M_MINRTY, M_GROUPQ, and the percentage MOE counterparts such as MP_POV150, MP_LIMENG, and MP_GROUPQ.
+For each estimate and many derived percentages, the dataset includes corresponding margin-of-error fields derived from American Community Survey sampling variability. Fields beginning with M_ represent margins of error for estimates, while fields beginning with MP_ represent margins of error for percentages.
+
+Examples include M_POV150, M_UNEMP, M_AGE65, M_MINRTY, M_GROUPQ, and the percentage MOE counterparts such as MP_POV150, MP_LIMENG, and MP_GROUPQ.
+
+Although these values provide important information about statistical uncertainty, they are not directly used as predictors in the machine learning models developed in this study.
 
 ## Ranked and Summary Output Fields
 
-A major strength of the SVI dataset is that it provides both the underlying social indicators and the official ranked outputs. After computing the EP_ percentage variables, the SVI creates percentile ranks for each variable using EPL_ fields. These are then summed within theme to form SPL_THEME1, SPL_THEME2, SPL_THEME3, and SPL_THEME4. The percentile ranking of each theme summary is stored in:
+After computing the EP_* percentage indicators, the SVI framework converts each indicator into percentile rankings (EPL_*). These percentiles are then aggregated within themes to produce theme summary scores (SPL_THEME1–SPL_THEME4). The percentile rankings of these theme summaries form the primary outcome variables:
 
 1) RPL_THEME1: Socioeconomic Status
 
@@ -145,7 +159,7 @@ A major strength of the SVI dataset is that it provides both the underlying soci
 
 The overall summary score is SPL_THEMES, and the overall county vulnerability percentile is RPL_THEMES. In practice, RPL_THEMES is the main overall SVI outcome variable. 
 
-This study focuses on the theme-level percentile rankings (RPL_THEME1–RPL_THEME4) and the overall SVI percentile ranking (RPL_THEMES). The feature matrix primarily uses the percentage-based vulnerability variables (EP_*), which represent normalized forms of the underlying ACS estimates.
+This study focuses on the **theme-level percentile rankings (RPL_THEME1–RPL_THEME4)** and the overall SVI percentile ranking (RPL_THEMES). The feature matrix primarily uses the **percentage-based vulnerability variables (EP_*)**, which represent normalized forms of the underlying estimates.
 
 # Model Design & Training Procedure
 
@@ -153,13 +167,19 @@ This section provides a brief overview of the modeling approach and training pip
 
 To evaluate whether spatial structure improves prediction of social vulnerability, three model types were implemented within a unified regression framework: a multilayer perceptron (MLP) baseline, a general graph neural network (GNN), and a graph convolutional network (GCN). Each model predicts the continuous Social Vulnerability Index (SVI) score at the county level using socioeconomic, demographic, and housing-related features derived from the CDC/ATSDR dataset.
 
-The primary predictor variables used in this study are the **16 EP_* variables** from the CDC/ATSDR SVI 2022 dataset. These variables represent estimated percentages of populations experiencing specific vulnerability-related conditions, such as poverty, unemployment, limited English proficiency, minority status, disability, housing crowding, and lack of vehicle access. Using the EP_* variables as the main features provides several advantages. First, these measures directly capture the underlying social and demographic characteristics that contribute to vulnerability rather than the aggregated composite index itself. Second, percentage-based variables provide normalized representations of population characteristics, allowing counties of different sizes to be compared on a consistent scale. Finally, using the EP_* variables aligns with the conceptual design of the SVI, where the overall index is derived from these component indicators, making them appropriate explanatory variables for modeling county-level variation in vulnerability.
+The primary predictor variables used in this study are the **16 EP_* variables** from the CDC/ATSDR SVI 2022 dataset. These variables represent estimated percentages of populations experiencing specific vulnerability-related conditions, such as poverty, unemployment, limited English proficiency, minority status, disability, housing crowding, and lack of vehicle access. Using the EP_* variables as the main features provides several advantages: 
 
-The MLP baseline serves as a tabular deep learning model that learns nonlinear relationships among county-level features while treating each county as an independent observation. In contrast, the graph-based models incorporate spatial structure by representing counties as nodes in a geographic graph constructed using spatial adjacency relationships. Edges in this graph connect neighboring counties based on Queen contiguity, allowing information to propagate between geographically adjacent regions during training.
+   1) These measures directly capture the underlying social and demographic characteristics that contribute to vulnerability rather than the aggregated composite index itself. 
+   
+   2) Percentage-based variables provide normalized representations of population characteristics, allowing counties of different sizes to be compared on a consistent scale.
+   
+   3) Using the EP_* variables aligns with the conceptual design of the SVI, where the overall index is derived from these component indicators, making them appropriate explanatory variables for modeling county-level variation in vulnerability.
 
-The general GNN model performs message passing across neighboring nodes to aggregate feature information from adjacent counties. Building on this approach, the GCN model applies graph convolution operations that aggregate normalized neighborhood features, enabling localized spatial smoothing and structured feature propagation across the county network.
+The MLP baseline serves as a tabular deep learning model that **learns nonlinear relationships among county-level features while treating each county as an independent observation**. In contrast, the graph-based models incorporate spatial structure by representing counties as nodes in a geographic graph constructed using spatial adjacency relationships. Edges in this graph connect neighboring counties based on Queen contiguity, allowing information to propagate between geographically adjacent regions during training.
 
-All models are trained as node-level regression models to predict continuous SVI-theme values. Prior to training, feature variables are transformed and standardized based on insights from exploratory data analysis to address skewness and scale differences across variables. For graph-based models, the processed features serve as node attributes, while the spatial adjacency matrix defines the graph structure used during message passing.
+The general GNN model performs message passing across neighboring nodes to aggregate **feature information from adjacent counties**. Building on this approach, the GCN model applies graph convolution operations that aggregate normalized neighborhood features, enabling localized spatial smoothing and structured feature propagation across the county network.
+
+All models are trained as **node-level regression models** to predict continuous SVI-theme values. Prior to training, feature variables are transformed and standardized based on insights from exploratory data analysis to address skewness and scale differences across variables. For graph-based models, the processed features serve as node attributes, while the spatial adjacency matrix defines the graph structure used during message passing.
 
 Training is conducted using supervised learning with a **regression loss function**, and models are optimized using **stochastic gradient–based methods**. The dataset is divided into training, validation, and test subsets. The training set is used to fit model parameters, while the validation set is used for hyperparameter tuning, early stopping, and model selection. After model configuration is finalized, performance is evaluated on the held-out test set to obtain an unbiased estimate of predictive accuracy and generalization. This evaluation framework enables consistent comparison between the tabular MLP baseline and the spatial graph-based models in order to determine whether explicitly modeling geographic relationships improves county-level SVI prediction.
 

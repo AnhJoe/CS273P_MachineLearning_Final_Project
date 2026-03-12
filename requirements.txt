@@ -4,6 +4,7 @@ pandas
 scikit-learn
 scipy
 statsmodels
+ipykernel
 
 # Visualization
 matplotlib
