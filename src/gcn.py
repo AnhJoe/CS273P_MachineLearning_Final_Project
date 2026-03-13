@@ -847,18 +847,19 @@ def run_gcn_experiment(
     y: torch.Tensor,
     train_mask: torch.Tensor,
     val_mask: torch.Tensor,
-    test_mask: torch.Tensor,
-    hidden_dim: int,
-    num_layers: int,
-    dropout: float,
-    lr: float,
-    weight_decay: float,
+    test_mask: Optional[torch.Tensor] = None,
+    hidden_dim: int = 64,
+    num_layers: int = 2,
+    dropout: float = 0.0,
+    lr: float = 1e-3,
+    weight_decay: float = 0.0,
     n_epochs: int = 300,
     patience: int = 30,
     seed: int = 42,
     target_names: Optional[List[str]] = None,
     scaler_y=None,
     verbose: bool = False,
+    evaluate_test: bool = False,
 ) -> Dict[str, Any]:
     """
     Run one complete GCN experiment from initialization through evaluation.
@@ -871,17 +872,21 @@ def run_gcn_experiment(
         Full node feature matrix.
     y : torch.Tensor
         Full node target matrix.
-    train_mask, val_mask, test_mask : torch.Tensor
-        Boolean masks for the three data splits.
-    hidden_dim : int
+    train_mask : torch.Tensor
+        Boolean mask for training nodes.
+    val_mask : torch.Tensor
+        Boolean mask for validation nodes.
+    test_mask : torch.Tensor or None, default=None
+        Boolean mask for test nodes. Only required when evaluate_test=True.
+    hidden_dim : int, default=64
         Hidden layer width.
-    num_layers : int
+    num_layers : int, default=2
         Number of graph convolution layers.
-    dropout : float
+    dropout : float, default=0.0
         Dropout probability.
-    lr : float
+    lr : float, default=1e-3
         Learning rate.
-    weight_decay : float
+    weight_decay : float, default=0.0
         Weight decay strength.
     n_epochs : int, default=300
         Maximum number of training epochs.
@@ -896,12 +901,16 @@ def run_gcn_experiment(
         computed on both scaled and inverse-transformed original target scales.
     verbose : bool, default=False
         Whether to print training progress.
+    evaluate_test : bool, default=False
+        Whether to evaluate on the test split. Keep False during baseline and
+        ablation experiments, and set to True only for the final locked model.
 
     Returns
     -------
     dict
         Dictionary containing the trained model, history, predictions, config,
-        and evaluation tables for validation and test splits.
+        and evaluation tables. Test-related outputs are None unless
+        evaluate_test=True.
     """
     set_seed(seed)
     device = X.device
@@ -929,49 +938,69 @@ def run_gcn_experiment(
         verbose=verbose,
     )
 
-    # Predictions on scaled target space
+    # ----------------------------
+    # Validation predictions/metrics
+    # ----------------------------
     val_pred = predict_gcn(model, adjacency, X, mask=val_mask)
-    test_pred = predict_gcn(model, adjacency, X, mask=test_mask)
-
     y_val = y[val_mask].detach().cpu().numpy()
-    y_test = y[test_mask].detach().cpu().numpy()
 
-    # Metrics on scaled target space
     val_metrics_scaled = evaluate_regression(y_val, val_pred)
-    test_metrics_scaled = evaluate_regression(y_test, test_pred)
     val_metrics_per_target_scaled = evaluate_regression_per_target(
         y_val, val_pred, target_names
     )
-    test_metrics_per_target_scaled = evaluate_regression_per_target(
-        y_test, test_pred, target_names
-    )
 
-    # Default outputs for original-scale values
+    # Default outputs for original-scale validation values
     y_val_original = None
-    y_test_original = None
     val_pred_original = None
-    test_pred_original = None
 
-    # If a target scaler is provided, compute original-scale predictions/metrics
     if scaler_y is not None:
         y_val_original = scaler_y.inverse_transform(y_val)
-        y_test_original = scaler_y.inverse_transform(y_test)
         val_pred_original = scaler_y.inverse_transform(val_pred)
-        test_pred_original = scaler_y.inverse_transform(test_pred)
 
         val_metrics = evaluate_regression(y_val_original, val_pred_original)
-        test_metrics = evaluate_regression(y_test_original, test_pred_original)
         val_metrics_per_target = evaluate_regression_per_target(
             y_val_original, val_pred_original, target_names
         )
-        test_metrics_per_target = evaluate_regression_per_target(
-            y_test_original, test_pred_original, target_names
-        )
     else:
         val_metrics = val_metrics_scaled
-        test_metrics = test_metrics_scaled
         val_metrics_per_target = val_metrics_per_target_scaled
-        test_metrics_per_target = test_metrics_per_target_scaled
+
+    # ----------------------------
+    # Test predictions/metrics
+    # ----------------------------
+    y_test = None
+    test_pred = None
+    test_metrics_scaled = None
+    test_metrics_per_target_scaled = None
+
+    y_test_original = None
+    test_pred_original = None
+    test_metrics = None
+    test_metrics_per_target = None
+
+    if evaluate_test:
+        if test_mask is None:
+            raise ValueError("test_mask must be provided when evaluate_test=True.")
+
+        test_pred = predict_gcn(model, adjacency, X, mask=test_mask)
+        y_test = y[test_mask].detach().cpu().numpy()
+
+        test_metrics_scaled = evaluate_regression(y_test, test_pred)
+        test_metrics_per_target_scaled = evaluate_regression_per_target(
+            y_test, test_pred, target_names
+        )
+
+        if scaler_y is not None:
+            y_test_original = scaler_y.inverse_transform(y_test)
+            test_pred_original = scaler_y.inverse_transform(test_pred)
+
+            test_metrics = evaluate_regression(y_test_original, test_pred_original)
+            test_metrics_per_target = evaluate_regression_per_target(
+                y_test_original, test_pred_original, target_names
+            )
+        else:
+            test_metrics = test_metrics_scaled
+            test_metrics_per_target = test_metrics_per_target_scaled
 
     results = {
         "model": model,
@@ -988,24 +1017,23 @@ def run_gcn_experiment(
             "seed": seed,
             "n_parameters": count_parameters(model),
         },
-        # Scaled-space outputs
+        # Validation outputs
         "y_val": y_val,
-        "y_test": y_test,
         "val_pred": val_pred,
-        "test_pred": test_pred,
         "val_metrics_scaled": val_metrics_scaled,
-        "test_metrics_scaled": test_metrics_scaled,
         "val_metrics_per_target_scaled": val_metrics_per_target_scaled,
-        "test_metrics_per_target_scaled": test_metrics_per_target_scaled,
-        # Original-scale outputs (if scaler_y provided)
         "y_val_original": y_val_original,
-        "y_test_original": y_test_original,
         "val_pred_original": val_pred_original,
-        "test_pred_original": test_pred_original,
-        # Primary reported metrics
         "val_metrics": val_metrics,
-        "test_metrics": test_metrics,
         "val_metrics_per_target": val_metrics_per_target,
+        # Test outputs (None unless evaluate_test=True)
+        "y_test": y_test,
+        "test_pred": test_pred,
+        "test_metrics_scaled": test_metrics_scaled,
+        "test_metrics_per_target_scaled": test_metrics_per_target_scaled,
+        "y_test_original": y_test_original,
+        "test_pred_original": test_pred_original,
+        "test_metrics": test_metrics,
         "test_metrics_per_target": test_metrics_per_target,
     }
 
