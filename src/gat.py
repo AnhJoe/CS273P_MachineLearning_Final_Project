@@ -1,14 +1,3 @@
-"""
-Graph Attention Network (GAT) for predicting disaster assistance outcomes using spatial county data.
-
-This module implements a GAT architecture for predicting disaster assistance needs across U.S. counties
-using socioeconomic vulnerability indicators and geographic adjacency relationships. The model uses
-CDC Social Vulnerability Index (SVI) theme scores as proxies for disaster assistance outcomes, as
-these indices are designed to identify communities requiring additional support before, during, and
-after disasters. The attention mechanism learns heterogeneous spatial influence weights between
-neighboring counties, capturing how disaster assistance needs propagate through geographic regions.
-"""
-
 import copy
 import random
 from typing import Dict, List, Tuple, Optional

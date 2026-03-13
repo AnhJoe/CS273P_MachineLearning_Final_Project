@@ -13,6 +13,8 @@ seaborn
 # ML / Deep Learning
 tensorflow
 torch
+
+# GAT
 torch-geometric
 
 # Data formats
