@@ -5,7 +5,6 @@
   - [Problem Statement:](#problem-statement)
   - [Scope:](#scope)
   - [Dataset Description](#dataset-description)
-  - [Repository Structure:](#repository-structure)
   - [Setup Instructions:](#setup-instructions)
   - [Required Dependencies:](#required-dependencies)
   - [Data Download Instructions:](#data-download-instructions)
@@ -111,27 +110,6 @@ Edges: Counties that share a geographic border
 Graph construction is performed using GeoPandas and spatial geometry operations.
 
 
-## Repository Structure:
-project/
-│
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── artifacts/
-├── notebooks/
-│   ├── 01_eda.ipynb
-│   ├── 02_baseline_mlp.ipynb
-│   ├── 03_gcn.ipynb
-│   ├── 01_eda.qmd
-│   ├── 02_baseline_mlp.qmd
-│   ├── 03_gcn.qmd
-├── src/
-│   ├── 
-├── requirements.txt
-├── README.md
-└── outputs/report
-
-
 ## Setup Instructions:
 
 - Clone Repo:
@@ -183,6 +161,8 @@ All dependencies are listed in requirements.txt.
     Unzip and place contents in:
 
     - data/raw/
+
+3. Alternatively, a zip file with both datasets can be downloaded from this Google Drive: https://drive.google.com/file/d/1n2t0LzxWxXodHmJGttF33cSRit5VKht4/view?usp=sharing 
 
 
 ## Implementation Guide: 

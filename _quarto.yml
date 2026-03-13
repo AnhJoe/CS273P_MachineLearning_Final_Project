@@ -8,8 +8,8 @@ book:
   chapters:
     - index.qmd
     - notebooks\01_eda.qmd
-    - notebooks\02_baseline_linear.qmd
-    - notebooks\03_mlp_gnn.qmd
+    - notebooks\02_mlp.qmd
+    - notebooks\03_gcn.qmd
     - notebooks\04_conclusion.qmd
 format:
   pdf:
