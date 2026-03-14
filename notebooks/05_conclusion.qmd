@@ -21,15 +21,19 @@
 
 5) Kalaycioglu, O., Akhanli, S. E., Mentese, E. Y., Kalaycioglu, M., & Kalaycioglu, S. (n.d.). Using machine learning algorithms to identify predictors of social vulnerability in the event of a hazard: Istanbul case study. 
 
-6) Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC’s SVI and SoVI® [Master’s thesis, Lund University]. 
+6) Kipf, T. N., & Welling, M. (2017). Semi-supervised classification with graph convolutional networks. In International Conference on Learning Representations (ICLR). https://arxiv.org/abs/1609.02907
+
+7) Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC's SVI and SoVI® [Master's thesis, Lund University].
 
 7) Robert T. Stafford Disaster Relief and Emergency Assistance Act, 42 U.S.C. §§ 5121–5207 (1988).
+
+9) Veličković, P., Cucurull, G., Casanova, A., Romero, A., Liò, P., & Bengio, Y. (2018). Graph attention networks. In International Conference on Learning Representations (ICLR). https://arxiv.org/abs/1710.10903
    
-8) Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
+10) Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
 
-9) Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
+11) Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
 
-10) Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
+12) Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
  
 
 # Appendix
@@ -65,7 +69,7 @@ Jared Lyon:
 
 - Evaluation pipeline
 
-- Plots + analysis
+- GAT
 
 - Proofreading
 
