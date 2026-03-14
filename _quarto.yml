@@ -15,7 +15,7 @@ format:
   pdf:
     output-file: rt_iot_final_report.pdf
     fig-path: outputs/figures
-    fontsize: 8pt
+    fontsize: 11pt
     fig-width: 2
     fig-height: 2
     tbl-pos: "htbp"
