@@ -1,34 +1,27 @@
-# Core scientific stack
+# Core data science libraries
 numpy
 pandas
-scikit-learn
-scipy
-statsmodels
-ipykernel
 
 # Visualization
 matplotlib
 seaborn
 
-# ML / Deep Learning
-tensorflow
+# Machine learning
+scikit-learn
 torch
 
-# GAT
-torch-geometric
-
-# Data formats
-pyarrow
-
-# Utilities
-tqdm
-pyyaml
-
-# Graph & Geo
+# Spatial data processing
 geopandas
-libpysal
 
-# Install quarto for report rendering
-# https://quarto.org/docs/get-started/
-# Quarto requires tinytext
-# Run: quarto install tinytex
+# Statistical analysis
+statsmodels
+
+# Model utilities
+joblib
+
+# Data access
+requests
+
+# Notebook environment
+ipython
+jupyter
