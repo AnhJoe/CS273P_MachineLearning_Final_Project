@@ -11,9 +11,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
 from sklearn.decomposition import PCA
 
-# -------------------------
+
 # Effect Size
-# -------------------------
 
 def effect_size(
     df: pd.DataFrame,
@@ -70,10 +69,7 @@ def effect_size(
 
 
 
-# -------------------------
 # Gap Statistic
-# -------------------------
-
 def _sample_uniform_reference(
     X: np.ndarray,
     n: int,
@@ -156,10 +152,7 @@ def choose_k_gap_rule(gap_df: pd.DataFrame) -> Optional[int]:
     return None
 
 
-# -------------------------
 # K selection diagnostics (Elbow + Silhouette + CH + Gap)
-# -------------------------
-
 def evaluate_kmeans_k(
     X: np.ndarray,
     k_range: range,
@@ -241,10 +234,8 @@ def plot_k_diagnostics(metrics_df: pd.DataFrame) -> None:
     plt.show()
 
 
-# -------------------------
-# Fit + visualize (unchanged, but included for completeness)
-# -------------------------
 
+# Fit + visualize
 def fit_kmeans(
     X: np.ndarray,
     k: int,

@@ -103,3 +103,4 @@ conda-meta/
 envs/
 *.conda
 *.conda-lock
+/.quarto/

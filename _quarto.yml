@@ -3,8 +3,8 @@ project:
   output-dir: outputs/reports
 
 book:
-  title: "Spatial Multi-Task Graph Neural Network for U.S. County Social Vulnerability Modeling"
-  author: "UC Irvine/Statistical Methods: Joe Nguyen, Jared Lyon, Haesung Becker"
+  title: "County-Level Spatial Graph Modeling of Social Vulnerability and FEMA Disaster Assistance (2018–2020)"
+  author: "UC Irvine/Machine Learning & Data Mining: Joe Nguyen, Jared Lyon, Haesung Becker"
   chapters:
     - index.qmd
     - notebooks\01_eda.qmd
@@ -13,9 +13,9 @@ book:
     - notebooks\04_conclusion.qmd
 format:
   pdf:
-    output-file: rt_iot_final_report.pdf
+    output-file: svi_fema_2018_2020_report.pdf
     fig-path: outputs/figures
-    fontsize: 11pt
+    fontsize: 10pt
     fig-width: 2
     fig-height: 2
     tbl-pos: "htbp"
@@ -25,11 +25,16 @@ format:
     toc-depth: 3
     df-print: default
     keep-tex: true
+    highlight-style: github
     geometry:
-    - margin=0.75in
+      - margin=0.75in
     header-includes:
       - \KOMAoption{captions}{tableheading}
+      - \KOMAoption{headings}{normal}
       - \usepackage{textcomp}
+      - \usepackage{fancyvrb}
+      - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+      - \RedeclareSectionCommand[beforeskip=0pt,afterskip=1.2\baselineskip]{chapter}
     include-in-header:
       text: |
         \usepackage[section]{placeins}

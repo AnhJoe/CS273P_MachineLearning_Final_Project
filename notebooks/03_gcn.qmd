@@ -1,0 +1,1352 @@
+---
+title: Graph Convolutional Networks (GCN)
+jupyter: python3
+---
+
+
+
+```{python}
+#| output: false
+
+import sys
+from pathlib import Path
+
+# Set to root for src load
+root = Path.cwd()
+while root != root.parent and not (root / "src").exists():
+    root = root.parent
+
+if not (root / "src").exists():
+    raise FileNotFoundError("Could not find 'src' folder above current working directory.")
+
+sys.path.insert(0, str(root))
+print("Project root:", root)
+```
+
+```{python}
+# Standard libraries
+import joblib
+from pathlib import Path
+
+# Third-party libraries
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from IPython.display import display
+
+# Local imports
+from src.gcn import (
+    GCNRegressor,
+    build_gcn_support,
+    build_optimizer,
+    count_parameters,
+    evaluate_regression,
+    evaluate_regression_per_target,
+    get_device,
+    history_to_dataframe,
+    make_masks,
+    numpy_to_torch_features_targets,
+    predict_gcn,
+    results_dict_to_frame,
+    run_gcn_experiment,
+    set_seed,
+    stack_split_arrays,
+    summarize_graph,
+    train_gcn,
+)
+
+# Global configuration
+SEED = 42
+
+plt.rcParams.update(
+    {
+        "font.size": 9,
+        "axes.titlesize": 10,
+        "axes.labelsize": 9,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
+        "legend.title_fontsize": 9,
+        "legend.frameon": True,
+        "legend.borderpad": 0.3,
+    }
+)
+```
+
+```{python}
+#| output: false
+
+# Load processed data, scalers, and artifacts
+processed_dir = Path("../data/processed")
+artifacts_dir = Path("../data/artifacts")
+
+# Load county geometries (used later for graph construction and spatial diagnostics)
+geo_df = gpd.read_file(processed_dir / "svi_counties.gpkg", layer="counties").copy()
+
+# Ensure FIPS formatting is consistent
+geo_df["FIPS"] = geo_df["FIPS"].astype(str).str.zfill(5)
+
+# Load processed split arrays
+data = np.load(processed_dir / "svi_processed_splits.npz", allow_pickle=True)
+
+# Log feature pipeline
+Xlog_train_scaled = data["Xlog_train_scaled"]
+Xlog_val_scaled = data["Xlog_val_scaled"]
+Xlog_test_scaled = data["Xlog_test_scaled"]
+
+# Targets
+ylog_train_scaled = data["ylog_train_scaled"]
+ylog_val_scaled = data["ylog_val_scaled"]
+ylog_test_scaled = data["ylog_test_scaled"]
+
+# County identifiers (used for alignment and diagnostics)
+fips_train = pd.Series(data["fips_train"]).astype(str).str.zfill(5).to_numpy()
+fips_val = pd.Series(data["fips_val"]).astype(str).str.zfill(5).to_numpy()
+fips_test = pd.Series(data["fips_test"]).astype(str).str.zfill(5).to_numpy()
+
+# Load scalers (needed to invert predictions later)
+scaler_Xlog = joblib.load(processed_dir / "scaler_Xlog.pkl")
+scaler_ylog = joblib.load(processed_dir / "scaler_ylog.pkl")
+
+# Concatenate all nodes in modeling order
+fips_all = np.concatenate([fips_train, fips_val, fips_test])
+X_all = np.vstack([Xlog_train_scaled, Xlog_val_scaled, Xlog_test_scaled])
+y_all = np.vstack([ylog_train_scaled, ylog_val_scaled, ylog_test_scaled])
+```
+
+```{python}
+#| output: false
+
+# Basic split and shape checks
+assert Xlog_train_scaled.shape[0] == len(fips_train)
+assert Xlog_val_scaled.shape[0] == len(fips_val)
+assert Xlog_test_scaled.shape[0] == len(fips_test)
+
+assert ylog_train_scaled.shape[0] == len(fips_train)
+assert ylog_val_scaled.shape[0] == len(fips_val)
+assert ylog_test_scaled.shape[0] == len(fips_test)
+
+assert X_all.shape[0] == len(fips_all)
+assert y_all.shape[0] == len(fips_all)
+
+# Check for duplicate FIPS before graph construction
+assert pd.Index(fips_all).is_unique
+assert pd.Index(geo_df["FIPS"]).is_unique
+
+# Check coverage before reindexing
+missing_in_geo = sorted(set(fips_all) - set(geo_df["FIPS"]))
+assert len(missing_in_geo) == 0
+
+# Reorder geometry to exact node order for graph construction
+geo_graph = geo_df.set_index("FIPS").loc[fips_all].copy()
+
+# Alignment assertions
+assert len(geo_graph) == len(fips_all) == X_all.shape[0] == y_all.shape[0]
+assert np.array_equal(geo_graph.index.to_numpy(), fips_all)
+
+# Final geometry integrity checks
+assert geo_graph.index.is_unique
+assert not geo_graph.index.isna().any()
+assert geo_graph.geometry.notna().all()
+
+# Alignment diagnostic
+alignment_summary = pd.DataFrame(
+    {
+        "Quantity": [
+            "Train counties",
+            "Validation counties",
+            "Test counties",
+            "Total modeled counties",
+            "geo_graph counties",
+            "Feature columns",
+            "Target columns",
+        ],
+        "Value": [
+            len(fips_train),
+            len(fips_val),
+            len(fips_test),
+            len(fips_all),
+            len(geo_graph),
+            X_all.shape[1],
+            y_all.shape[1] if y_all.ndim > 1 else 1,
+        ],
+    }
+)
+
+display(alignment_summary.style.hide(axis="index"))
+```
+
+```{python}
+#| output: false
+
+# Load best MLP results
+mlp_config_df = pd.read_csv(artifacts_dir / "final_mlp_results.csv", index_col=0)
+
+display(mlp_config_df.T)
+```
+
+## Model Motivation
+
+The multilayer perceptron (MLP) experiments established a strong non-spatial baseline using the log-transformed SVI indicators. The best MLP achieved a test performance of **RMSE = 2.00** and **$R^2 = 0.57$**, indicating that county-level vulnerability indicators explain a meaningful but incomplete portion of the variation in FEMA assistance.
+
+However, counties are not independent observations. Neighboring counties often share regional socioeconomic conditions, infrastructure systems, hazard exposure, and policy contexts. Ignoring these spatial relationships may limit predictive performance. A graph-based model can explicitly incorporate this spatial dependence by representing **counties as nodes and geographic adjacency as edges**, allowing the model to combine local tabular features with information from nearby counties. The goal of the Graph Convolutional Network (GCN) stage is therefore to evaluate whether explicit spatial structure improves prediction compared to the tabular MLP baseline. Graph-based learning approaches provide a principled framework for modeling relationships in network-structured data (Hamilton, 2020).
+
+## Model Formulation
+
+Let $G = (V,E)$ denote a graph where each node $i \in V$ represents a county and edges $(i,j) \in E$ represent spatial adjacency defined using **Queen contiguity**. Let $X \in \mathbb{R}^{n \times p}$ denote the matrix of county-level predictors (log-transformed SVI indicators) and $y \in \mathbb{R}^{n}$ denote the log-transformed FEMA assistance target.
+
+A Graph Convolutional Network updates node representations by combining each node’s features with aggregated information from its neighbors (Kipf & Welling, 2017). A typical GCN layer is
+
+$$
+H^{(\ell + 1)} =
+\sigma
+\left(
+\tilde{D}^{-1/2}
+\tilde{A}
+\tilde{D}^{-1/2}
+H^{(\ell)}
+W^{(\ell)}
+\right)
+$$
+
+where
+
+- $H^{(0)} = X$
+- $\tilde{A} = A + I$ is the adjacency matrix with self-loops
+- $\tilde{D}$ is the corresponding degree matrix
+- $W^{(\ell)}$ is a trainable weight matrix
+- $\sigma(\cdot)$ is a nonlinear activation function
+
+This formulation allows the model to propagate information across neighboring counties while learning node-level representations from both local features and spatial context (Hamilton, 2020).
+
+The final layer produces predictions
+
+$$
+\hat{y} \in \mathbb{R}^{n}
+$$
+
+and the model is trained by minimizing **mean squared error (MSE)** on the training nodes.
+
+## Baseline Configuration from the MLP
+
+To ensure a fair comparison between model classes, the GCN stage preserves the same preprocessing and evaluation setup used in the MLP experiments. This ensures that any performance differences arise from the use of spatial structure rather than changes in the data pipeline.
+
+The main elements carried forward include:
+
+- Log-transformed feature matrix $X_{\log}$
+- Standardized input features using the training split scaler
+- Standardized log-transformed target variable
+- Fixed train / validation / test splits
+- Identical evaluation metrics: **RMSE** and **$R^2$**
+- Final comparison against the **saved best MLP configuration**
+
+### Baseline GCN Configuration
+
+The baseline graph convolutional network (GCN) uses the following initial hyperparameter configuration prior to the ablation experiments:
+
+- Number of graph convolution layers: 1  
+- Hidden dimension: 64  
+- Dropout: 0.1  
+- Optimizer: Adam  
+- Learning rate: $(1 \times 10^{-3})$  
+- Weight decay: $(1 \times 10^{-5})$  
+- Maximum training epochs: 300  
+- Early stopping patience: 25 epochs  
+
+These parameters provide a stable starting point for evaluating graph-based learning on the county adjacency network. Subsequent ablation experiments systematically vary architectural and regularization parameters to identify the best-performing configuration before final evaluation on the held-out test set.
+
+## GCN Ablation Plan
+
+The GCN experiments focus on three design dimensions: graph depth, hidden representation size, and regularization strength. Each dimension is varied independently while the others remain fixed, mirroring the ablation strategy used in the MLP stage.
+
+### Number of GCN Layers
+
+The first ablation varies the number of graph convolution layers (e.g., **1, 2, and 3 layers**). Each additional layer expands the spatial receptive field, allowing counties to incorporate information from increasingly distant neighbors. However, deeper graph models may suffer from **oversmoothing**, where node representations become overly similar (Hamilton, 2020).
+
+### Hidden Dimension
+
+The second ablation varies the hidden dimension (e.g., **16, 32, and 64 units**). This parameter controls the representational capacity of the model and determines how flexibly the GCN can combine county-level features with neighborhood information.
+
+### Regularization
+
+The final ablation focuses on regularization. Consistent with the MLP findings, weight decay is treated as the primary regularization mechanism, while dropout remains modest. Weight decay values such as **$0$, $10^{-5}$, and $10^{-3}$** are tested alongside dropout values such as **$0.0$, $0.1$, and $0.3$** to evaluate whether similar regularization patterns apply to spatial graph models.
+
+```{python}
+#| label: tbl-split-summary
+#| tbl-cap: Shapes of the processed train, validation, and test arrays used for GCN modeling.
+#| output: false
+
+# Data validation
+split_summary = pd.DataFrame(
+    {
+        "Split": ["Train", "Validation", "Test"],
+        "X Shape": [
+            Xlog_train_scaled.shape,
+            Xlog_val_scaled.shape,
+            Xlog_test_scaled.shape,
+        ],
+        "y Shape": [
+            ylog_train_scaled.shape,
+            ylog_val_scaled.shape,
+            ylog_test_scaled.shape,
+        ],
+    }
+)
+
+display(split_summary.style.hide(axis="index"))
+```
+
+```{python}
+#| label: tbl-geo-summary
+#| tbl-cap: Basic summary of the county geometry used to construct the spatial graph.
+#| output: false
+
+# Data validation
+geo_summary = pd.DataFrame(
+    {
+        "Metric": [
+            "Number of counties",
+            "Number of columns",
+            "CRS",
+            "Node order aligned to splits",
+        ],
+        "Value": [
+            len(geo_graph),
+            geo_graph.shape[1],
+            str(geo_graph.crs),
+            np.array_equal(geo_graph.index.to_numpy(), fips_all),
+        ],
+    }
+)
+
+display(geo_summary.style.hide(axis="index"))
+```
+
+```{python}
+#| label: tbl-queen-graph-summary
+#| tbl-cap: Summary of the Queen contiguity graph constructed from county geometries.
+#| output: false
+
+set_seed(SEED)
+
+# Build graph support using the geometry already aligned to fips_all order
+adjacency_raw, adjacency_norm, adjacency_torch, queen_w = build_gcn_support(
+    geo_df=geo_graph,
+    id_column=None,
+    add_loops=True,
+    use_index=True,
+)
+
+graph_summary = summarize_graph(adjacency_raw)
+display(graph_summary.style.hide(axis="index"))
+```
+
+```{python}
+# Stack arrays in train -> val -> test order
+X_all, y_all, train_idx, val_idx, test_idx, node_order, split_ids, split_sizes = stack_split_arrays(
+    X_train=Xlog_train_scaled,
+    X_val=Xlog_val_scaled,
+    X_test=Xlog_test_scaled,
+    y_train=ylog_train_scaled,
+    y_val=ylog_val_scaled,
+    y_test=ylog_test_scaled,
+)
+
+# Create boolean masks that identify which graph nodes belong to each split
+train_mask, val_mask, test_mask = make_masks(
+    n_nodes=X_all.shape[0],
+    train_idx=train_idx,
+    val_idx=val_idx,
+    test_idx=test_idx,
+)
+```
+
+```{python}
+# Select the computation device
+device = get_device()
+
+# Convert the stacked feature and target arrays to PyTorch tensors
+X_t, y_t = numpy_to_torch_features_targets(X_all, y_all, device=device)
+
+# Move graph objects and masks to the same device
+adjacency_torch = adjacency_torch.to(device)
+train_mask = train_mask.to(device)
+val_mask = val_mask.to(device)
+test_mask = test_mask.to(device)
+
+assert X_t.shape[0] == adjacency_torch.shape[0] == adjacency_torch.shape[1]
+assert y_t.shape[0] == X_t.shape[0]
+```
+
+```{python}
+#| label: tbl-gcn-baseline-config
+#| tbl-cap: Initial baseline configuration for the baseline GCN.
+
+# Define baseline GCN configuration informed by the final MLP results
+base_gcn_config = {
+    "num_layers": 1,
+    "hidden_dim": 64,
+    "dropout": 0.1,
+    "weight_decay": 1e-5,
+    "lr": 1e-3,
+    "n_epochs": 300,
+    "patience": 25,
+    "seed": SEED,
+}
+
+# Display configuration
+gcn_baseline_config_df = pd.DataFrame(
+    {
+        "Hyperparameter": list(base_gcn_config.keys()),
+        "Value": list(base_gcn_config.values()),
+    }
+)
+
+display(
+    gcn_baseline_config_df.style
+    .format({"Value": lambda x: f"{x:.0e}" if isinstance(x, float) and x < 0.01 else x})
+    .hide(axis="index")
+)
+```
+
+```{python}
+#| output: false
+
+baseline_gcn_results = run_gcn_experiment(
+    adjacency=adjacency_torch,
+    X=X_t,
+    y=y_t,
+    train_mask=train_mask,
+    val_mask=val_mask,
+    hidden_dim=base_gcn_config["hidden_dim"],
+    num_layers=base_gcn_config["num_layers"],
+    dropout=base_gcn_config["dropout"],
+    lr=base_gcn_config["lr"],
+    weight_decay=base_gcn_config["weight_decay"],
+    n_epochs=base_gcn_config["n_epochs"],
+    patience=base_gcn_config["patience"],
+    seed=base_gcn_config["seed"],
+    target_names=["log1p_total_ihp"],
+    scaler_y=scaler_ylog,
+    verbose=False,
+    evaluate_test=False,
+)
+```
+
+```{python}
+#| label: tbl-gcn-training-summary
+#| tbl-cap: Training summary for the baseline GCN experiment, including the best validation epoch and parameter count.
+
+# Summarize key training results from the baseline GCN run
+gcn_training_summary = pd.DataFrame(
+    {
+        "Metric": [
+            "Best validation epoch",
+            "Best validation loss",
+            "Number of trainable parameters",
+        ],
+        "Value": [
+            baseline_gcn_results["history"].best_epoch,
+            baseline_gcn_results["history"].best_val_loss,
+            baseline_gcn_results["config"]["n_parameters"],
+        ],
+    }
+)
+
+display(gcn_training_summary.style.hide(axis="index"))
+```
+
+```{python}
+#| label: fig-gcn-training-history
+#| fig-cap: Training and validation loss curves for the baseline GCN model.
+
+# Convert the saved training history to a DataFrame for plotting
+history_df = baseline_gcn_results["history_df"]
+
+best_epoch = baseline_gcn_results["history"].best_epoch
+
+# Plot train and validation loss across epochs
+fig, ax = plt.subplots(figsize=(4, 4))
+
+ax.plot(history_df["epoch"], history_df["train_loss"], label="Train Loss")
+ax.plot(history_df["epoch"], history_df["val_loss"], label="Validation Loss")
+
+# Mark best validation epoch
+ax.axvline(best_epoch, linestyle="--", alpha=0.6, label="Best Epoch")
+
+ax.set_title("Baseline GCN Training History")
+ax.set_xlabel("Epoch")
+ax.set_ylabel("MSE Loss")
+ax.legend(loc="upper right")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: tbl-gcn-baseline-results
+#| tbl-cap: Baseline GCN validation results for predicting log1p(FEMA IHP). Performance is summarized using validation RMSE and $R^2$.
+
+gcn_baseline_summary = pd.DataFrame(
+    {
+        "Number of Layers": [baseline_gcn_results["config"]["num_layers"]],
+        "Hidden Dimension": [baseline_gcn_results["config"]["hidden_dim"]],
+        "Dropout": [baseline_gcn_results["config"]["dropout"]],
+        "Weight Decay": [baseline_gcn_results["config"]["weight_decay"]],
+        "Learning Rate": [baseline_gcn_results["config"]["lr"]],
+        "Trainable Parameters": [baseline_gcn_results["config"]["n_parameters"]],
+        "Epochs Trained": [len(baseline_gcn_results["history"].train_loss)],
+        "Best Epoch": [baseline_gcn_results["history"].best_epoch],
+        "Best Validation Loss": [baseline_gcn_results["history"].best_val_loss],
+        "Validation RMSE": [float(baseline_gcn_results["val_metrics"]["RMSE"].iloc[0])],
+        "Validation R²": [float(baseline_gcn_results["val_metrics"]["R2"].iloc[0])],
+    }
+)
+
+gcn_baseline_summary["Best Validation Loss"] = gcn_baseline_summary["Best Validation Loss"].round(6)
+gcn_baseline_summary["Validation RMSE"] = gcn_baseline_summary["Validation RMSE"].round(6)
+gcn_baseline_summary["Validation R²"] = gcn_baseline_summary["Validation R²"].round(6)
+
+gcn_baseline_summary["Experiment"] = ["Baseline GCN"]
+
+gcn_baseline_summary = gcn_baseline_summary.set_index("Experiment").T
+
+display(gcn_baseline_summary)
+```
+
+```{python}
+#| label: fig-gcn-baseline-performance
+#| fig-cap: Validation performance for the baseline GCN model predicting log1p(FEMA IHP). RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy on the validation split.
+
+rmse_vals = [float(baseline_gcn_results["val_metrics"]["RMSE"].iloc[0])]
+r2_vals = [float(baseline_gcn_results["val_metrics"]["R2"].iloc[0])]
+
+experiments = ["Baseline GCN"]
+x = np.arange(len(experiments))
+width = 0.35
+
+rmse_ylim = (2.5)
+r2_ylim = (0.14)
+
+fig, ax = plt.subplots(figsize=(3, 4))
+
+bars1 = ax.bar(
+    x - width / 2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax.set_ylabel("Validation RMSE")
+ax.set_xticks(x)
+ax.set_xticklabels(experiments)
+ax.set_xlabel("Experiment")
+ax.set_title("Baseline GCN")
+
+if rmse_ylim is not None:
+    ax.set_ylim(rmse_ylim)
+
+ax2 = ax.twinx()
+
+bars2 = ax2.bar(
+    x + width / 2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Validation $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+ax.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper right"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+## Layer Ablation
+
+The effect of GCN depth was evaluated by varying the number of graph convolution layers ($\text{num\_layers} = 1, 2, 3$) while holding all other hyperparameters fixed. The results are summarized in @tbl-gcn-layer-ablation and visualized in @fig-gcn-layer-ablation.
+
+Increasing the model depth from one to two layers substantially improved performance. The single-layer model achieved a validation RMSE of $2.760$ and $R^2 = 0.145$, while the two-layer model reduced RMSE to $2.449$ and increased $R^2$ to $0.327$. This improvement indicates that incorporating information from two-hop neighborhoods helps capture broader spatial relationships between counties. Adding a third layer did not improve performance. The three-layer model produced a slightly higher RMSE of $2.481$ and a lower $R^2$ of $0.309$, suggesting diminishing returns as depth increases. Overall, the two-layer GCN achieved the best validation performance and was selected as the base architecture for subsequent ablation experiments.
+
+```{python}
+#| label: tbl-gcn-layer-ablation-grid
+#| tbl-cap: Layer configurations evaluated in the first GCN ablation stage.
+#| output: false
+
+layer_candidates = [1, 2, 3]
+
+layer_ablation_df = pd.DataFrame({"num_layers": layer_candidates})
+display(layer_ablation_df.style.hide(axis="index"))
+```
+
+```{python}
+#| output: false
+
+layer_results = []
+
+for num_layers in layer_candidates:
+
+    result = run_gcn_experiment(
+        adjacency=adjacency_torch,
+        X=X_t,
+        y=y_t,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        hidden_dim=base_gcn_config["hidden_dim"],
+        num_layers=num_layers,
+        dropout=base_gcn_config["dropout"],
+        lr=base_gcn_config["lr"],
+        weight_decay=base_gcn_config["weight_decay"],
+        n_epochs=base_gcn_config["n_epochs"],
+        patience=base_gcn_config["patience"],
+        seed=base_gcn_config["seed"],
+        target_names=["log1p_total_ihp"],
+        scaler_y=scaler_ylog,
+        verbose=False,
+        evaluate_test=False,
+    )
+
+    layer_results.append(
+        {
+            "Number of Layers": num_layers,
+            "Validation RMSE": float(result["val_metrics"]["RMSE"].iloc[0]),
+            "Validation R²": float(result["val_metrics"]["R2"].iloc[0]),
+        }
+    )
+```
+
+```{python}
+#| label: tbl-gcn-layer-ablation
+#| tbl-cap: Layer ablation results for the GCN model predicting log1p(FEMA IHP). Performance is summarized using validation RMSE and $R^2$.
+
+layer_results_df = pd.DataFrame(layer_results)
+
+layer_summary = layer_results_df[
+    [
+        "Number of Layers",
+        "Validation RMSE",
+        "Validation R²",
+    ]
+].copy()
+
+layer_summary["Validation RMSE"] = layer_summary["Validation RMSE"].round(6)
+layer_summary["Validation R²"] = layer_summary["Validation R²"].round(6)
+
+layer_summary["Experiment"] = (
+    "Layers=" + layer_summary["Number of Layers"].astype(str)
+)
+
+layer_summary = layer_summary.drop(columns=["Number of Layers"])
+layer_summary = layer_summary.set_index("Experiment").T
+
+display(layer_summary)
+```
+
+```{python}
+#| label: fig-gcn-layer-ablation
+#| fig-cap: Validation performance across different GCN layer depths when predicting log1p(FEMA IHP). RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy on the validation split.
+
+layers = layer_results_df["Number of Layers"].values
+rmse_vals = layer_results_df["Validation RMSE"].values
+r2_vals = layer_results_df["Validation R²"].values
+
+x = np.arange(len(layers))
+width = 0.35
+
+rmse_ylim = (2.25)
+r2_ylim = (.12)
+
+fig, ax1 = plt.subplots(figsize=(4,4))
+
+# RMSE bars
+bars1 = ax1.bar(
+    x - width/2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax1.set_ylabel("Validation RMSE")
+ax1.set_xticks(x)
+ax1.set_xticklabels(layers)
+ax1.set_xlabel("Number of GCN Layers")
+ax1.set_title("GCN Layer Ablation")
+
+if rmse_ylim is not None:
+    ax1.set_ylim(rmse_ylim)
+
+# R² bars
+ax2 = ax1.twinx()
+
+bars2 = ax2.bar(
+    x + width/2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Validation $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+# Legend
+ax1.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper left"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Select the best layer configuration using validation RMSE
+best_num_layers = int(
+    layer_results_df.loc[
+        layer_results_df["Validation RMSE"].idxmin(),
+        "Number of Layers"
+    ]
+)
+
+# Update base configuration with the best number of layers
+base_gcn_config["num_layers"] = best_num_layers
+```
+
+## Hidden Dimension Ablation
+
+The hidden dimension ablation evaluates how the width of the GCN representation affects predictive performance while holding all other hyperparameters fixed. The results are summarized in @tbl-gcn-hidden-ablation-results and visualized in @fig-gcn-hidden-ablation.
+
+Increasing the hidden dimension consistently improved performance. Expanding the model from $32$ to $64$ hidden units reduced validation RMSE from $2.490$ to $2.449$ and increased $R^2$ from $0.305$ to $0.327$. Further increasing the hidden dimension to $128$ produced the best performance, lowering RMSE to $2.424$ and increasing $R^2$ to $0.341$.
+
+These results indicate that a wider hidden representation allows the GCN to learn richer spatial feature transformations from the socioeconomic predictors. The $128$-dimensional configuration achieved the best validation performance and was therefore selected as the hidden dimension for the final model configuration.
+
+```{python}
+#| label: tbl-gcn-hidden-ablation-grid
+#| tbl-cap: Hidden dimension configurations evaluated in the second GCN ablation stage.
+#| output: false
+
+hidden_candidates = [32, 64, 128]
+
+hidden_ablation_df = pd.DataFrame({"hidden_dim": hidden_candidates})
+display(hidden_ablation_df.style.hide(axis="index"))
+```
+
+```{python}
+#| output: false
+
+hidden_results = []
+
+for hidden_dim in hidden_candidates:
+
+    result = run_gcn_experiment(
+        adjacency=adjacency_torch,
+        X=X_t,
+        y=y_t,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        hidden_dim=hidden_dim,
+        num_layers=best_num_layers,
+        dropout=base_gcn_config["dropout"],
+        lr=base_gcn_config["lr"],
+        weight_decay=base_gcn_config["weight_decay"],
+        n_epochs=base_gcn_config["n_epochs"],
+        patience=base_gcn_config["patience"],
+        seed=base_gcn_config["seed"],
+        target_names=["log1p_total_ihp"],
+        scaler_y=scaler_ylog,
+        verbose=False,
+        evaluate_test=False,
+    )
+
+    hidden_results.append(
+        {
+            "Hidden Dimension": hidden_dim,
+            "Validation RMSE": float(result["val_metrics"]["RMSE"].iloc[0]),
+            "Validation R²": float(result["val_metrics"]["R2"].iloc[0]),
+        }
+    )
+```
+
+```{python}
+#| label: tbl-gcn-hidden-ablation-results
+#| tbl-cap: Hidden dimension ablation results for the GCN using the best layer configuration from the previous stage. Performance is summarized using validation RMSE and $R^2$ for predicting log1p(FEMA IHP).
+
+hidden_results_df = (
+    pd.DataFrame(hidden_results)
+    .sort_values("Hidden Dimension")
+    .reset_index(drop=True)
+)
+
+display(hidden_results_df.style.hide(axis="index"))
+```
+
+```{python}
+#| label: fig-gcn-hidden-ablation
+#| fig-cap: Validation performance across different GCN hidden dimensions using the best layer configuration. RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy for log1p(FEMA IHP).
+
+hidden_dims = hidden_results_df["Hidden Dimension"].values
+rmse_vals = hidden_results_df["Validation RMSE"].values
+r2_vals = hidden_results_df["Validation R²"].values
+
+x = np.arange(len(hidden_dims))
+width = 0.35
+
+rmse_ylim = (2.25)
+r2_ylim = (0.28)
+
+fig, ax1 = plt.subplots(figsize=(4,4))
+
+# RMSE bars
+bars1 = ax1.bar(
+    x - width/2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax1.set_ylabel("Validation RMSE")
+ax1.set_xticks(x)
+ax1.set_xticklabels(hidden_dims)
+ax1.set_xlabel("Hidden Dimension")
+ax1.set_title("GCN Hidden Dimension Ablation")
+
+if rmse_ylim is not None:
+    ax1.set_ylim(rmse_ylim)
+
+# R² bars
+ax2 = ax1.twinx()
+
+bars2 = ax2.bar(
+    x + width/2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Validation $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+# Legend
+ax1.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper right"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Select the best hidden dimension based on validation RMSE
+best_hidden_dim = int(
+    hidden_results_df.loc[
+        hidden_results_df["Validation RMSE"].idxmin(),
+        "Hidden Dimension"
+    ]
+)
+
+# Update base configuration with the best hidden dimension
+base_gcn_config["hidden_dim"] = best_hidden_dim
+```
+
+## Regularization Ablation
+
+### Weight Decay Ablation
+
+The effect of L2 regularization was evaluated by varying the weight decay parameter while keeping the selected architecture (two GCN layers and a $128$-dimensional hidden representation) fixed. The results are summarized in @tbl-gcn-weight-decay-results and visualized in @fig-gcn-weight-decay-ablation.
+
+Model performance was relatively stable across the tested weight decay values. The configuration without regularization ($0$) and the very small penalty ($10^{-5}$) produced nearly identical results, both achieving a validation RMSE of approximately $2.418$ and an $R^2$ of about $0.344$. Increasing the regularization strength to $10^{-3}$ slightly degraded performance, increasing RMSE to $2.424$ and reducing $R^2$ to $0.341$.
+
+These results suggest that strong regularization is not necessary for this model configuration. The smallest non-zero value ($10^{-5}$) achieved the best validation RMSE while maintaining stable $R^2$, and was therefore selected as the final weight decay setting for the GCN model.
+
+```{python}
+#| label: tbl-gcn-weight-decay-grid
+#| tbl-cap: Weight decay configurations evaluated in the GCN regularization ablation.
+#| output: false
+
+weight_decay_candidates = [0.0,  1e-5, 1e-3]
+
+weight_decay_df = pd.DataFrame({"weight_decay": weight_decay_candidates})
+display(weight_decay_df.style.format({"weight_decay": "{:.0e}"}).hide(axis="index"))
+```
+
+```{python}
+#| output: false
+
+weight_decay_results = []
+
+for wd in weight_decay_candidates:
+
+    result = run_gcn_experiment(
+        adjacency=adjacency_torch,
+        X=X_t,
+        y=y_t,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        hidden_dim=best_hidden_dim,
+        num_layers=best_num_layers,
+        dropout=0.0,
+        lr=base_gcn_config["lr"],
+        weight_decay=wd,
+        n_epochs=base_gcn_config["n_epochs"],
+        patience=base_gcn_config["patience"],
+        seed=base_gcn_config["seed"],
+        target_names=["log1p_total_ihp"],
+        scaler_y=scaler_ylog,
+        verbose=False,
+        evaluate_test=False,
+    )
+
+    weight_decay_results.append(
+        {
+            "Weight Decay": wd,
+            "Validation RMSE": float(result["val_metrics"]["RMSE"].iloc[0]),
+            "Validation R²": float(result["val_metrics"]["R2"].iloc[0]),
+        }
+    )
+```
+
+```{python}
+#| label: tbl-gcn-weight-decay-results
+#| tbl-cap: Weight decay ablation results for the GCN using the selected layer depth and hidden dimension. Performance is summarized using validation RMSE and $R^2$ for predicting log1p(FEMA IHP).
+
+weight_decay_results_df = (
+    pd.DataFrame(weight_decay_results)
+    .sort_values("Weight Decay")
+    .reset_index(drop=True)
+)
+
+display(
+    weight_decay_results_df
+    .style
+    .format({"Weight Decay": "{:.0e}"})
+    .hide(axis="index")
+)
+```
+
+```{python}
+#| label: fig-gcn-weight-decay-ablation
+#| fig-cap: Validation performance across weight decay strengths using the selected GCN architecture. RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy for log1p(FEMA IHP).
+
+wd_vals = weight_decay_results_df["Weight Decay"].values
+rmse_vals = weight_decay_results_df["Validation RMSE"].values
+r2_vals = weight_decay_results_df["Validation R²"].values
+
+x = np.arange(len(wd_vals))
+width = 0.35
+
+rmse_ylim = (2.38)
+r2_ylim = (0.33)
+
+fig, ax1 = plt.subplots(figsize=(4,4))
+
+# RMSE bars
+bars1 = ax1.bar(
+    x - width/2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax1.set_ylabel("Validation RMSE")
+ax1.set_xticks(x)
+
+labels = ["0" if v == 0 else f"{v:.0e}" for v in wd_vals]
+ax1.set_xticklabels(labels)
+
+ax1.set_xlabel("Weight Decay")
+ax1.set_title("GCN Weight Decay Ablation")
+
+if rmse_ylim is not None:
+    ax1.set_ylim(rmse_ylim)
+
+# R² bars
+ax2 = ax1.twinx()
+
+bars2 = ax2.bar(
+    x + width/2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Validation $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+# Legend
+ax1.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper right"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Select the best weight decay based on validation RMSE
+best_weight_decay = float(
+    weight_decay_results_df.loc[
+        weight_decay_results_df["Validation RMSE"].idxmin(),
+        "Weight Decay"
+    ]
+)
+
+# Update base configuration with the best weight decay
+base_gcn_config["weight_decay"] = best_weight_decay
+```
+
+### Dropout Ablation
+
+The effect of dropout regularization was evaluated by varying the dropout probability while keeping the selected architecture (two GCN layers, hidden dimension of $128$, and weight decay of $10^{-5}$) fixed. The results are summarized in @tbl-gcn-dropout-results and visualized in @fig-gcn-dropout-ablation.
+
+The model achieved the best validation performance without dropout. With dropout set to $0$, the model obtained a validation RMSE of $2.418$ and an $R^2$ of $0.344$. Introducing dropout slightly degraded performance: a dropout rate of $0.1$ increased RMSE to $2.424$ and reduced $R^2$ to $0.341$, while a higher dropout rate of $0.3$ further increased RMSE to $2.429$ and reduced $R^2$ to $0.338$.
+
+These results suggest that dropout does not provide a benefit for this configuration. Because the dataset is relatively small and the selected GCN architecture is modest in size, additional stochastic regularization appears unnecessary. Consequently, a dropout value of $0$ was selected for the final GCN configuration.
+
+```{python}
+#| label: tbl-gcn-dropout-grid
+#| tbl-cap: Dropout configurations evaluated after selecting the best weight decay.
+#| output: false
+
+dropout_candidates = [0.0, 0.1, 0.3]
+
+dropout_df = pd.DataFrame({"dropout": dropout_candidates})
+display(dropout_df.style.format({"dropout": "{:.1e}"}).hide(axis="index"))
+```
+
+```{python}
+#| output: false
+
+dropout_results = []
+
+for dropout in dropout_candidates:
+
+    result = run_gcn_experiment(
+        adjacency=adjacency_torch,
+        X=X_t,
+        y=y_t,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        hidden_dim=best_hidden_dim,
+        num_layers=best_num_layers,
+        dropout=dropout,
+        lr=base_gcn_config["lr"],
+        weight_decay=best_weight_decay,
+        n_epochs=base_gcn_config["n_epochs"],
+        patience=base_gcn_config["patience"],
+        seed=base_gcn_config["seed"],
+        target_names=["log1p_total_ihp"],
+        scaler_y=scaler_ylog,
+        verbose=False,
+        evaluate_test=False,
+    )
+
+    dropout_results.append(
+        {
+            "Dropout": dropout,
+            "Validation RMSE": float(result["val_metrics"]["RMSE"].iloc[0]),
+            "Validation R²": float(result["val_metrics"]["R2"].iloc[0]),
+        }
+    )
+```
+
+```{python}
+#| label: tbl-gcn-dropout-results
+#| tbl-cap: Dropout ablation results for the GCN using the selected architecture and weight decay. Performance is summarized using validation RMSE and $R^2$ for predicting log1p(FEMA IHP).
+
+dropout_results_df = (
+    pd.DataFrame(dropout_results)
+    .sort_values("Dropout")
+    .reset_index(drop=True)
+)
+
+display(
+    dropout_results_df
+    .style
+    .format({"Dropout": "{:.1e}"})
+    .hide(axis="index")
+)
+```
+
+```{python}
+#| label: fig-gcn-dropout-ablation
+#| fig-cap: Validation performance across dropout probabilities using the selected GCN architecture. RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy for log1p(FEMA IHP).
+
+drop_vals = dropout_results_df["Dropout"].values
+rmse_vals = dropout_results_df["Validation RMSE"].values
+r2_vals = dropout_results_df["Validation R²"].values
+
+x = np.arange(len(drop_vals))
+width = 0.35
+
+rmse_ylim = (2.25)
+r2_ylim = (0.3)
+
+fig, ax1 = plt.subplots(figsize=(4,4))
+
+bars1 = ax1.bar(
+    x - width/2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax1.set_ylabel("Validation RMSE")
+ax1.set_xticks(x)
+
+labels = ["0" if v == 0 else f"{v:.1f}" for v in drop_vals]
+ax1.set_xticklabels(labels)
+
+ax1.set_xlabel("Dropout")
+ax1.set_title("GCN Dropout Ablation")
+
+if rmse_ylim is not None:
+    ax1.set_ylim(rmse_ylim)
+
+ax2 = ax1.twinx()
+
+bars2 = ax2.bar(
+    x + width/2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Validation $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+ax1.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper right"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Select the best dropout using validation RMSE
+best_dropout = float(
+    dropout_results_df.loc[
+        dropout_results_df["Validation RMSE"].idxmin(),
+        "Dropout"
+    ]
+)
+
+# Update base configuration with the best dropout
+base_gcn_config["dropout"] = best_dropout
+```
+
+# Final Model Comparisons
+
+@tbl-mlp-gcn-comparison and @fig-mlp-gcn-overall-comparison summarize the final held-out test performance of the final multilayer perceptron (MLP) baseline and the final graph convolutional network (GCN). For both models, the best-performing hyperparameter configuration identified during the ablation experiments was selected and then retrained using the full training data before being evaluated on the held-out test set. This ensures that the reported results reflect the strongest configuration discovered during model development while maintaining a strict separation between model selection and final evaluation.
+
+The MLP baseline uses a deeper fully connected architecture with hidden layers ([128, 64, 32]), resulting in **12,417 trainable parameters**. Training converged relatively quickly, stopping after **46 epochs**, with the best validation performance occurring at epoch 21. On the held-out test set, the MLP achieved a **test RMSE of 2.00** and an **$R^2$ of 0.571**, indicating that the model explains approximately **57% of the variance** in the log-transformed FEMA IHP outcome. These results suggest that nonlinear interactions among the SVI indicators provide meaningful predictive signal for disaster assistance outcomes.
+
+The GCN model, in contrast, incorporates spatial relationships between counties through a two-layer graph convolutional architecture with 128 hidden units and **2,177 trainable parameters**, substantially fewer than the MLP baseline. Despite this architectural efficiency, the GCN produced weaker predictive performance. Training ran for the full **300 epochs**, with the best validation performance occurring late in training at epoch 300. On the test set, the model achieved a **test RMSE of 2.40** and an **$R^2$ of 0.397**, explaining roughly **40% of the variance** in the target variable.
+
+```{python}
+# Best gcn config
+final_gcn_config = {
+    "num_layers": best_num_layers,
+    "hidden_dim": best_hidden_dim,
+    "weight_decay": best_weight_decay,
+    "dropout": best_dropout,
+    "lr": base_gcn_config["lr"],
+    "n_epochs": base_gcn_config["n_epochs"],
+    "patience": base_gcn_config["patience"],
+    "seed": base_gcn_config["seed"],
+}
+```
+
+```{python}
+#| output: false
+
+# Run the final GCN using the selected configuration on held-out test set
+final_gcn_results = run_gcn_experiment(
+    adjacency=adjacency_torch,
+    X=X_t,
+    y=y_t,
+    train_mask=train_mask,
+    val_mask=val_mask,
+    test_mask=test_mask,
+    hidden_dim=final_gcn_config["hidden_dim"],
+    num_layers=final_gcn_config["num_layers"],
+    dropout=final_gcn_config["dropout"],
+    lr=final_gcn_config["lr"],
+    weight_decay=final_gcn_config["weight_decay"],
+    n_epochs=final_gcn_config["n_epochs"],
+    patience=final_gcn_config["patience"],
+    seed=final_gcn_config["seed"],
+    target_names=["log1p_total_ihp"],
+    scaler_y=scaler_ylog,
+    verbose=False,
+    evaluate_test=True,
+)
+```
+
+```{python}
+#| label: tbl-mlp-gcn-comparison
+#| tbl-cap: Configuration and test-set comparison between the final MLP baseline and the final GCN model.
+
+# Extract from configs
+mlp_row = mlp_config_df.iloc[0]
+gcn_cfg = final_gcn_results["config"]
+gcn_history_df = final_gcn_results["history_df"]
+gcn_test_metrics = final_gcn_results["test_metrics"].iloc[0]
+
+# Calculate GCN # of params
+gcn_trainable_params = sum(
+    p.numel() for p in final_gcn_results["model"].parameters() if p.requires_grad
+)
+# Calculate epochs & val_loss
+gcn_epochs_trained = len(gcn_history_df)
+gcn_best_epoch = int(gcn_history_df["val_loss"].idxmin()) + 1
+gcn_best_val_loss = float(gcn_history_df["val_loss"].min())
+
+model_comparison_df = pd.DataFrame(
+    {
+        "Metric": [
+            "Feature Pipeline",
+            "Architecture",
+            "Hidden Dimensions",
+            "Dropout",
+            "Weight Decay",
+            "Learning Rate",
+            "Trainable Parameters",
+            "Epochs Trained",
+            "Best Epoch",
+            "Best Validation Loss",
+            "Test RMSE",
+            "Test R²",
+        ],
+        "MLP": [
+            mlp_row["Feature Pipeline"],
+            mlp_row["Architecture"],
+            mlp_row["Hidden Dimensions"],
+            mlp_row["Dropout"],
+            mlp_row["Weight Decay"],
+            mlp_row["Learning Rate"],
+            mlp_row["Trainable Parameters"],
+            mlp_row["Epochs Trained"],
+            mlp_row["Best Epoch"],
+            mlp_row["Best Validation Loss"],
+            mlp_row["Test RMSE"],
+            mlp_row["Test R²"],
+        ],
+        "GCN": [
+            "Log-Transformed Features",
+            f'GCN ({gcn_cfg["num_layers"]} layers)',
+            gcn_cfg["hidden_dim"],
+            gcn_cfg["dropout"],
+            gcn_cfg["weight_decay"],
+            gcn_cfg["lr"],
+            gcn_trainable_params,
+            gcn_epochs_trained,
+            gcn_best_epoch,
+            gcn_best_val_loss,
+            gcn_test_metrics["RMSE"],
+            gcn_test_metrics["R2"],
+        ],
+    }
+)
+
+display(model_comparison_df.style.hide(axis="index"))
+```
+
+```{python}
+#| label: fig-mlp-gcn-overall-comparison
+#| fig-cap: Overall held-out test-set comparison between the best MLP baseline and the final GCN model. RMSE (left axis) and $R^2$ (right axis) summarize predictive accuracy for log1p(FEMA IHP).
+
+rmse_row = model_comparison_df.loc[model_comparison_df["Metric"] == "Test RMSE"].iloc[0]
+r2_row = model_comparison_df.loc[model_comparison_df["Metric"] == "Test R²"].iloc[0]
+
+models = np.array(["MLP", "GCN"])
+rmse_vals = np.array([rmse_row["MLP"], rmse_row["GCN"]], dtype=float)
+r2_vals = np.array([r2_row["MLP"], r2_row["GCN"]], dtype=float)
+
+x = np.arange(len(models))
+width = 0.35
+
+rmse_ylim = (1.8)
+r2_ylim = (0.3)
+
+fig, ax1 = plt.subplots(figsize=(4,4))
+
+bars1 = ax1.bar(
+    x - width/2,
+    rmse_vals,
+    width,
+    label="RMSE",
+    color="#e63946"
+)
+
+ax1.set_ylabel("Test RMSE")
+ax1.set_xticks(x)
+ax1.set_xticklabels(models)
+ax1.set_xlabel("Model")
+ax1.set_title("Best MLP vs. Best GCN")
+
+if rmse_ylim is not None:
+    ax1.set_ylim(rmse_ylim)
+
+ax2 = ax1.twinx()
+
+bars2 = ax2.bar(
+    x + width/2,
+    r2_vals,
+    width,
+    label="$R^2$",
+    color="#2a9d8f"
+)
+
+ax2.set_ylabel("Test $R^2$")
+
+if r2_ylim is not None:
+    ax2.set_ylim(r2_ylim)
+
+ax1.legend(
+    [bars1[0], bars2[0]],
+    ["RMSE", "$R^2$"],
+    loc="upper right"
+)
+
+plt.tight_layout()
+plt.show()
+```
+
+Overall, the **baseline MLP outperforms the spatial GCN model across all evaluation metrics**. The lower RMSE and higher $R^2$ indicate that the tabular MLP architecture captures the predictive structure of the SVI indicators more effectively than the spatial model under the current configuration. One possible explanation is that the county-level socioeconomic variables already encode much of the relevant variation in disaster assistance outcomes, leaving limited additional predictive value for spatial smoothing through graph convolutions. Additionally, the relatively sparse spatial signal in FEMA assistance distributions may reduce the benefits of neighborhood aggregation in the graph model.
+
+These findings highlight that while graph neural networks offer a principled mechanism for incorporating spatial structure, they do not automatically outperform well-tuned tabular models. In this case, the MLP baseline provides a stronger predictive benchmark and serves as an important reference point for evaluating the contribution of spatial modeling approaches.
+
