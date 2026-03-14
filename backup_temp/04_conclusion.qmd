@@ -1,0 +1,133 @@
+# Conclusion
+
+This study examined whether incorporating spatial structure through graph neural networks improves the prediction of disaster assistance outcomes using county-level socioeconomic indicators from the 2018 CDC/ATSDR Social Vulnerability Index (SVI) dataset. Using the 2018-2020 FEMA Individual Household Program (IHP) assistance aggregations as the prediction target, the project compared a nonlinear multilayer perceptron (MLP) baseline with a graph convolutional network (GCN) that explicitly models county adjacency relationships.
+
+Across all evaluation metrics, the **MLP baseline achieved stronger predictive performance than the GCN model**. Results suggest that the tabular socioeconomic indicators already capture much of the predictive signal relevant to disaster assistance outcomes, and that the spatial aggregation performed by the GCN did not provide additional predictive benefit under the current modeling configuration. The learning curves further indicate that the MLP converges quickly and generalizes well with relatively modest regularization. In contrast, the GCN required substantially longer training and did not achieve comparable predictive accuracy despite having fewer trainable parameters. Overall, the findings highlight that **well-tuned tabular neural networks remain strong baselines for structured socioeconomic data**, and that the benefits of graph-based spatial modeling depend heavily on the strength of spatial correlation present in the underlying target variable.
+
+More broadly, the results provide insight into the central research question of this study: **to what extent do these vulnerability indicators correspond to the distribution of disaster assistance in practice?** The findings suggest that the SVI socioeconomic indicators exhibit a moderate but meaningful relationship with disaster assistance outcomes. The best-performing model explains roughly 57% of the variance in FEMA IHP assistance at the county level, indicating that vulnerability-related demographic and socioeconomic factors are strongly associated with how disaster assistance is distributed. However, the remaining unexplained variance also highlights that assistance outcomes are influenced by additional factors not captured by the SVI indicators alone, such as disaster severity, event-specific damage patterns, housing characteristics, and administrative or policy mechanisms affecting aid allocation.
+
+## Project Contributions
+
+This project contributes both practical insights into disaster vulnerability analysis and technical advancements in modeling spatial socioeconomic data:
+
+1) **Empirical evaluation of vulnerability indicators and disaster assistance outcomes.**
+  The study quantifies the extent to which county-level social vulnerability indicators correspond to the distribution of FEMA Individual Household Program assistance from 2018-2020, providing evidence that socioeconomic vulnerability explains a substantial portion of variation in disaster aid outcomes.
+
+2) **Evidence-based comparison of spatial and non-spatial predictive models.**
+  The results demonstrate that a well-tuned tabular neural network can outperform a spatial graph neural network for this task, offering practical guidance for analysts deciding whether spatial modeling is necessary for similar socioeconomic datasets.
+
+3) **Reproducible analytical pipeline for vulnerability modeling.**
+  The project establishes a transparent workflow for integrating CDC SVI indicators, county adjacency graphs, and disaster assistance outcomes into a consistent machine learning evaluation framework.
+
+Together, these contributions provide a methodologically rigorous and practically relevant framework for studying how social vulnerability indicators relate to disaster outcomes, while also illustrating the strengths and limitations of spatial deep learning approaches for structured socioeconomic datasets.
+
+## Challenges
+
+Several technical and methodological challenges arose during the project.
+
+### Ensuring Row Alignment with County Identifiers
+
+One important challenge was ensuring that **row indices remained perfectly aligned with county FIPS identifiers** across all datasets and processing stages. Because the graph neural network relies on adjacency relationships between counties, even small misalignments between feature matrices, target variables, and graph structure could introduce subtle errors or incorrect spatial relationships.
+
+Careful validation steps were required to ensure that:
+
+- Feature matrices were consistently ordered by FIPS code
+- Geographic adjacency matrices corresponded to the same ordering
+- Data splits preserved this alignment throughout training and evaluation
+
+### Preventing Data Leakage During Hyperparameter Selection
+
+Another critical concern involved avoiding **data leakage across ablation experiments used for hyperparameter selection**. During the ablation stage, models were evaluated only on the validation set while keeping the held-out test set untouched. The final model configurations were selected based solely on validation performance and then retrained before evaluating on the test set. Maintaining this strict separation ensured that the reported test metrics provide an unbiased estimate of model generalization performance.
+
+## Future Work
+
+Several directions could extend and improve the current study.
+
+### Exploring Alternative Graph-Based Models
+
+While this project focused on graph convolutional networks (GCNs), many other graph learning architectures may capture spatial dependencies more effectively. Future work could explore models such as:
+
+- GraphSAGE
+- Spatial graph transformers
+- Hierarchical graph architectures
+
+These approaches may provide richer representations of spatial relationships or allow models to learn which neighboring counties contribute most to predictions.
+
+### Integrating Additional County-Level Features
+
+Another promising direction involves expanding the feature set beyond the core SVI indicators. Incorporating additional **external county-level socioeconomic, infrastructure, environmental, or disaster exposure variables** could improve predictive power and provide deeper insights into vulnerability patterns. 
+
+Overall, this study demonstrates both the potential and the limitations of spatial deep learning approaches when applied to structured socioeconomic data. While spatial models provide a powerful conceptual framework, their practical benefit depends on the degree to which spatial dependencies meaningfully contribute additional predictive signal beyond the underlying tabular features.
+
+# References
+
+1) Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry. (2024). A validity assessment of the Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry Social Vulnerability Index (CDC/ATSDR SVI). U.S. Department of Health and Human Services. 
+
+2) Federal Emergency Management Agency. (2020). COVID-19 pandemic: Emergency declaration under the Stafford Act. https://www.fema.gov
+   
+3) Federal Emergency Management Agency. (n.d.). Disaster declarations summaries (v2). OpenFEMA. https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2
+   
+4) Flanagan, B. E., Gregory, E. W., Hallisey, E. J., Heitgerd, J. L., & Lewis, B. (2011). A social vulnerability index for disaster management. Journal of Homeland Security and Emergency Management, 8(1), Article 3.
+
+5) Hamilton, W. (2020). Graph Representation Learning. Morgan & Claypool. 
+   https://www.cs.mcgill.ca/~wlh/grl_book/files/GRL_Book.pdf
+   
+6) Kalaycioglu, O., Akhanli, S. E., Mentese, E. Y., Kalaycioglu, M., & Kalaycioglu, S. (n.d.). Using machine learning algorithms to identify predictors of social vulnerability in the event of a hazard: Istanbul case study. 
+
+7) Kipf, T. N., & Welling, M. (2017). Semi-supervised classification with graph convolutional networks. International Conference on Learning Representations (ICLR). https://arxiv.org/pdf/1609.02907 
+   
+8) Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC’s SVI and SoVI® [Master’s thesis, Lund University]. 
+
+9)  Robert T. Stafford Disaster Relief and Emergency Assistance Act, 42 U.S.C. §§ 5121–5207 (1988).
+   
+10) Russell, S. J., & Norvig, P. (2021). Artificial intelligence: A modern approach (4th ed.). Pearson. https://api.pageplace.de/preview/DT0400.9781292401171_A41586057/preview-9781292401171_A41586057.pdf 
+
+11) Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
+
+12) Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
+
+13) Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
+ 
+
+# Appendix
+
+1) Github Repository: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling
+   
+2) Alternative Dataset Download Option: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.0
+
+3) U.S. SVI Publications and Use Cases / SUIT Database: https://www.atsdr.cdc.gov/place-health/php/svi/svi-publications.html
+
+
+# Team Contributions
+
+Joe Nguyen: 
+
+- Project research, report outline, intro, conclusion
+
+- EDA, MLP
+
+- Proofreading
+
+- Quarto setup, report rendering
+
+Haesung Becker:
+
+- Project research
+
+- GCN
+
+- Proofreading
+
+- Github repo setup
+
+Jared Lyon:
+
+- Evaluation pipeline
+
+- GAT
+
+- Proofreading
+
+- Github repo cleanup
+
+We worked closely together to recommend datasets and project ideas related to our interests. After initial inspections, we voted and collectively decided on this experiment and its scope.
