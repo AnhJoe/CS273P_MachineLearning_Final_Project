@@ -8,11 +8,10 @@
   - [1. Exploratory Data Analysis (01\_eda.ipynb)](#1-exploratory-data-analysis-01_edaipynb)
   - [2. Baseline Deep Learning Model (02\_mlp.ipynb)](#2-baseline-deep-learning-model-02_mlpipynb)
   - [3. Spatial Graph Modeling (03\_gcn.ipynb)](#3-spatial-graph-modeling-03_gcnipynb)
-- [Data Sources](#data-sources)
-  - [SVI Data Summary](#svi-data-summary)
+- [Data Summary](#data-summary)
+  - [Data Sources](#data-sources)
+  - [Core SVI Feature Set: 15 Social Vulnerability Variables](#core-svi-feature-set-15-social-vulnerability-variables)
   - [FEMA Disaster Assistance Data Summary](#fema-disaster-assistance-data-summary)
-    - [Fields Retrieved](#fields-retrieved)
-    - [Target Variable Construction](#target-variable-construction)
 - [Implementation](#implementation)
   - [Data Download Instructions:](#data-download-instructions)
 - [Meet The Team:](#meet-the-team)
@@ -33,13 +32,13 @@ Full Report: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/
 
 # Abstract
 
-This study investigates the relationship between county-level social vulnerability indicators and the distribution of disaster assistance using machine learning and spatial modeling techniques. Using the **2018 CDC/ATSDR Social Vulnerability Index (SVI)** indicators as predictors and **FEMA Individual Household Program (IHP) assistance aggregations from 2018-2020** as the target outcome, the project evaluates whether incorporating spatial structure improves predictive performance. A nonlinear multilayer perceptron (MLP) baseline and a graph convolutional network (GCN) are implemented within a unified regression framework to compare tabular and spatial learning approaches.
+This study investigates the relationship between county-level social vulnerability indicators and the distribution of disaster assistance using machine learning and spatial modeling techniques. Using the 2018 CDC/ATSDR Social Vulnerability Index (SVI) indicators as predictors and FEMA Individual Household Program (IHP) assistance from 2018-2020 as the target outcome, the project evaluates whether incorporating spatial structure improves predictive performance. A nonlinear multilayer perceptron (MLP) baseline and a graph convolutional network (GCN) are implemented within a unified regression framework to compare tabular and spatial learning approaches.
 
 The analysis uses log-transformed socioeconomic indicators, standardized features, and fixed train/validation/test splits to ensure consistent evaluation. Hyperparameters for both models are selected through controlled ablation experiments, and the best-performing configurations are retrained before final evaluation on a held-out test set.
 
-Results show that the **MLP baseline outperforms the spatial GCN model** across evaluation metrics. The best MLP configuration achieves a test RMSE of approximately 2.00 and an $R^2$ of 0.57, while the GCN achieves a test RMSE of approximately 2.38 and an $R^2$ of 0.40. These findings indicate that socioeconomic vulnerability indicators explain a substantial portion of variation in disaster assistance outcomes, but that incorporating county adjacency through graph convolution does not improve predictive performance in this setting.
+Results show that the **MLP baseline outperforms the spatial GCN model across evaluation metrics**. The best MLP configuration achieves a test RMSE of 2.0048 and an $R^2$ of 0.5712, while the GCN achieves a test RMSE of approximately 2.4050 and an $R^2$ of 0.3829. Overall, the results suggest that while social vulnerability indicators provide meaningful signals for predicting disaster assistance outcomes, additional **spatial modeling does not necessarily yield improvements** when the underlying spatial dependency in the target variable is limited.
 
-Overall, the results suggest that while social vulnerability indicators provide meaningful signal for predicting disaster assistance outcomes, additional spatial modeling does not necessarily yield improvements when the underlying spatial dependency in the target variable is limited. The study provides a reproducible modeling framework for integrating vulnerability indicators, disaster assistance data, and graph-based learning methods, while highlighting the importance of strong tabular baselines when evaluating spatial machine learning approaches.
+The study provides a reproducible modeling framework for integrating vulnerability indicators, disaster assistance data, and graph-based learning methods, while highlighting the importance of strong tabular baselines when evaluating spatial machine learning approaches.
 
 
 # Project Contributions
@@ -96,57 +95,68 @@ To incorporate geographic structure, counties are represented as nodes in a spat
 A **Graph Convolutional Network (GCN)** is applied to learn county representations by aggregating information from neighboring counties. This enables the model to capture localized spatial dependencies in vulnerability indicators that may influence disaster assistance outcomes.
 
 
-# Data Sources
+# Data Summary
 
-1. US County 2018 SVI dataset:  
-https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html
+The county-level 2018 Social Vulnerability Index (SVI) dataset is a relative vulnerability dataset designed to identify counties that may be more vulnerable before, during, and after hazardous events. The dataset integrates socioeconomic indicators derived primarily from the U.S. Census Bureau American Community Survey and converts them into percentile-based vulnerability rankings across U.S. counties. SVI variables are organized through a structured pipeline of derived fields. These include raw estimate fields (`E_`), margin-of-error fields (`M_`), derived percentage fields (`EP_`), percentage margin-of-error fields (`MP_`), percentile-ranked indicator fields (`EPL_`), theme sums (`SPL_`), theme percentile rankings (`RPL_THEME1` through `RPL_THEME4`), and the overall percentile ranking (`RPL_THEMES`). Higher percentile values correspond to greater relative social vulnerability compared with other counties.
 
-2. US County 2018 SVI dataset documentation:  
-https://svi.cdc.gov/map25/data/docs/SVI2018Documentation_01192022_1.pdf
+In this study, the SVI dataset is used as a feature dataset representing underlying social and demographic conditions at the county level. 
 
-3. US County 2018 TIGER/Line county boundaries:  
-https://www2.census.gov/geo/tiger/TIGER2018/COUNTY/
+## Data Sources
 
-4. FEMA Individuals and Households Program disaster assistance data API (2018–2020):  
-https://www.fema.gov/api/open/v2/IndividualsAndHouseholdsProgramValidRegistrations
+1. **US County 2018 SVI dataset:** [CDC/ATSDR Download](https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html)
+2. **US County 2018 SVI dataset documentation:** [SVI 2018 Documentation (PDF)](https://svi.cdc.gov/map25/data/docs/SVI2018Documentation_01192022_1.pdf)
+3. **US County 2018 TIGER/Line county boundaries:** [Census.gov TIGER/Line](https://www2.census.gov/geo/tiger/TIGER2018/COUNTY/)
+4. **FEMA Individuals and Households Program disaster assistance data API (2018–2020):** [OpenFEMA API Endpoint](https://www.fema.gov/api/open/v2/IndividualsAndHouseholdsProgramValidRegistrations)
 
 The TIGER/Line geographic data provide county boundary geometries used to construct spatial adjacency relationships for the graph-based models developed later in the study.
 
-## SVI Data Summary
+## Core SVI Feature Set: 15 Social Vulnerability Variables
 
-The county-level **2018 Social Vulnerability Index (SVI)** dataset is a relative vulnerability dataset designed to identify counties that may be more vulnerable before, during, and after hazardous events. The index was developed by the Centers for Disease Control and Prevention and the Agency for Toxic Substances and Disease Registry to support disaster preparedness, response planning, and public health resource allocation (Flanagan et al., 2011; CDC/ATSDR, 2024). The dataset integrates socioeconomic indicators derived primarily from the U.S. Census Bureau American Community Survey and converts them into percentile-based vulnerability rankings across U.S. counties.
+The primary predictive feature set consists of 15 socioeconomic indicators, organized into four themes within the official SVI framework. These indicators are expressed as percentages (`EP_*` variables) derived from underlying American Community Survey estimates.
 
-In the official documentation, SVI variables are organized through a structured pipeline of derived fields. These include raw estimate fields (E_), margin-of-error fields (M_), derived percentage fields (EP_), percentage margin-of-error fields (MP_), percentile-ranked indicator fields (EPL_), theme sums (SPL_), theme percentile rankings (RPL_THEME1 through RPL_THEME4), and the overall percentile ranking (RPL_THEMES). Higher percentile values correspond to **greater relative social vulnerability compared with other counties**.
+**Theme 1: Socioeconomic Status**
+This theme captures economic hardship and limited access to financial resources.
 
-In this study, the SVI dataset is used as a **feature dataset representing underlying social and demographic conditions at the county level**. The analysis uses the underlying socioeconomic indicators as predictors to examine whether patterns of social vulnerability are associated with **disaster assistance outcomes observed during the 2018–2020 period**. This framing allows the study to evaluate whether vulnerability indicators measured in 2018 correspond to subsequent disaster impacts and recovery assistance across U.S. counties.
+* **`E_POV` / `EP_POV`:** persons below poverty level
+* **`E_UNEMP` / `EP_UNEMP`:** civilian unemployed population age 16+
+* **`E_PCI` / `EP_PCI`:** per capita income
+* **`E_NOHSDP` / `EP_NOHSDP`:** persons age 25+ with no high school diploma
+
+**Theme 2: Household Characteristics**
+This theme captures age-related dependency, disability, and family structure vulnerabilities.
+
+* **`E_AGE65` / `EP_AGE65`:** persons aged 65 and older
+* **`E_AGE17` / `EP_AGE17`:** persons aged 17 and younger
+* **`E_DISABL` / `EP_DISABL`:** civilian noninstitutionalized population with a disability
+* **`E_SNGPNT` / `EP_SNGPNT`:** single-parent households with children under 18
+
+**Theme 3: Minority Status and Language**
+This theme captures minority population representation and language barriers.
+
+* **`E_MINRTY` / `EP_MINRTY`:** minority population percentage, defined as persons who are Hispanic or Latino of any race or non-Hispanic persons belonging to racial minority groups
+* **`E_LIMENG` / `EP_LIMENG`:** persons age 5+ who speak English “less than well”
+
+**Theme 4: Housing Type and Transportation**
+This theme captures housing structure, crowding, and transportation access.
+
+* **`E_MUNIT` / `EP_MUNIT`:** housing in structures with 10 or more units
+* **`E_MOBILE` / `EP_MOBILE`:** mobile homes
+* **`E_CROWD` / `EP_CROWD`:** occupied housing units with more people than rooms
+* **`E_NOVEH` / `EP_NOVEH`:** households with no vehicle available
+* **`E_GROUPQ` / `EP_GROUPQ`:** persons living in group quarters
 
 ## FEMA Disaster Assistance Data Summary
 
-Disaster assistance outcomes used in this study are obtained directly from the **Federal Emergency Management Agency (FEMA) OpenFEMA API**, specifically the *Individuals and Households Program (IHP) Valid Registrations* dataset. This dataset records household-level disaster assistance provided to individuals following federally declared disasters and includes information on financial assistance amounts, geographic location, and disaster identifiers.
+Disaster assistance outcomes used in this study are obtained directly from the Federal Emergency Management Agency (FEMA) OpenFEMA API, specifically the Individuals and Households Program (IHP) Valid Registrations dataset. This dataset records household-level disaster assistance provided to individuals following federally declared disasters and includes information on financial assistance amounts, geographic location, and disaster identifiers. 
 
-The dataset is accessed programmatically using the OpenFEMA API endpoint. Using the API allows the study to retrieve only the fields necessary for analysis and filter records by date, avoiding the need to download the full dataset. To maintain a clear temporal ordering between predictors and outcomes, the analysis uses:
+The dataset is accessed programmatically using the OpenFEMA API endpoint. The following fields are retrieved directly from the OpenFEMA API:
 
-- SVI predictors from 2018
-- Disaster assistance outcomes from 2018–2020
+* **`disasterNumber`:** FEMA disaster identifier
+* **`incidentBeginDate`:** date when the disaster incident began
+* **`fips`:** county-level FIPS geographic identifier
+* **`ihpAmount`:** total FEMA Individuals and Households Program assistance awarded for a registration
 
-This design evaluates whether social vulnerability indicators measured in 2018 correspond to disaster recovery assistance observed during the subsequent three-year period.
-
-### Fields Retrieved
-
-The following fields are retrieved directly from the OpenFEMA API:
-
-- **disasterNumber** – FEMA disaster identifier  
-- **incidentBeginDate** – date when the disaster incident began  
-- **fips** – county-level FIPS geographic identifier  
-- **ihpAmount** – total FEMA Individuals and Households Program assistance awarded for a registration  
-
-The ihpAmount field represents the total financial assistance provided to a household through FEMA’s Individual Assistance programs, which may include housing repair, replacement, rental assistance, personal property assistance, and other eligible recovery costs.
-
-### Target Variable Construction
-
-Because the FEMA dataset records assistance at the individual registration level, the data are aggregated to the **county level** using the FIPS geographic identifier. The final modeling target is constructed by summing all **ihpAmount** values within each county across the 2018–2020 period. Formally, the county-level disaster assistance target is defined as: County Assistance = Σ ihpAmount (for all registrations in a county from 2018–2020).
-
-This produces a **county-level measure of total disaster assistance received during 2018-2022**, which serves as the regression target for the study's ML models. The FEMA dataset also includes county-level **FIPS codes**, allowing the aggregated assistance outcomes to be merged directly with the SVI dataset and county geometries. This shared geographic identifier enables the integration of socioeconomic vulnerability indicators, disaster assistance outcomes, and spatial adjacency relationships within a unified county-level dataset used for modeling.
+Because the FEMA dataset records assistance at the individual registration level, the data are aggregated to the county level using the FIPS geographic identifier. The final modeling target is constructed by summing all `ihpAmount` values within each county across the 2018–2020 period. This produces a county-level measure of total disaster assistance received during 2018-2022, which serves as the regression target for the study's ML models. The FEMA dataset also includes county-level FIPS codes, allowing the aggregated assistance outcomes to be merged directly with the SVI dataset and county geometries. This shared geographic identifier enables the integration of socioeconomic vulnerability indicators, disaster assistance outcomes, and spatial adjacency relationships within a unified county-level dataset used for modeling.
 
 # Implementation
 
@@ -174,6 +184,7 @@ This produces a **county-level measure of total disaster assistance received dur
 
 9. Changes to conclusion section can be made in notebooks/04_conclusion.qmd 
 
+Note: Google Collab users must clone the repo first before running any individual ipynb files.
 
 ## Data Download Instructions:
 
@@ -219,6 +230,7 @@ This produces a **county-level measure of total disaster assistance received dur
 
 4. Alternatively, a zip file with all datasets can be downloaded from this release: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.0
 
+5. Google Collab users can clone the repo and run the data import blocks in 01_eda.ipynb to download directly from a zip file of the datasets hosted on Google Drive.
 
 # Meet The Team:
 
@@ -230,28 +242,28 @@ Jared Lyon
 
 # References
 
-1) Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry. (2024). A validity assessment of the Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry Social Vulnerability Index (CDC/ATSDR SVI). U.S. Department of Health and Human Services. 
+Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry. (2024). A validity assessment of the Centers for Disease Control and Prevention/Agency for Toxic Substances and Disease Registry Social Vulnerability Index (CDC/ATSDR SVI). U.S. Department of Health and Human Services.
 
-2) Federal Emergency Management Agency. (2020). COVID-19 pandemic: Emergency declaration under the Stafford Act. https://www.fema.gov
-   
-3) Federal Emergency Management Agency. (n.d.). Disaster declarations summaries (v2). OpenFEMA. https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2
-   
-4) Flanagan, B. E., Gregory, E. W., Hallisey, E. J., Heitgerd, J. L., & Lewis, B. (2011). A social vulnerability index for disaster management. Journal of Homeland Security and Emergency Management, 8(1), Article 3.
+Federal Emergency Management Agency. (2020). COVID-19 pandemic: Emergency declaration under the Stafford Act. https://www.fema.gov
 
-5) Hamilton, W. (2020). Graph Representation Learning. Morgan & Claypool. https://www.cs.mcgill.ca/~wlh/grl_book/files/GRL_Book.pdf
-   
-6) Kalaycioglu, O., Akhanli, S. E., Mentese, E. Y., Kalaycioglu, M., & Kalaycioglu, S. (n.d.). Using machine learning algorithms to identify predictors of social vulnerability in the event of a hazard: Istanbul case study. 
+Federal Emergency Management Agency. (n.d.). Disaster declarations summaries (v2). OpenFEMA. https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2
 
-7) Kipf, T. N., & Welling, M. (2017). Semi-supervised classification with graph convolutional networks. International Conference on Learning Representations (ICLR). https://arxiv.org/pdf/1609.02907 
-   
-8) Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC’s SVI and SoVI® [Master’s thesis, Lund University]. 
+Flanagan, B. E., Gregory, E. W., Hallisey, E. J., Heitgerd, J. L., & Lewis, B. (2011). A social vulnerability index for disaster management. Journal of Homeland Security and Emergency Management, 8(1), Article 3.
 
-9)  Robert T. Stafford Disaster Relief and Emergency Assistance Act, 42 U.S.C. §§ 5121–5207 (1988).
-   
-10) Russell, S. J., & Norvig, P. (2021). Artificial intelligence: A modern approach (4th ed.). Pearson. https://api.pageplace.de/preview/DT0400.9781292401171_A41586057/preview-9781292401171_A41586057.pdf 
+Hamilton, W. (2020). Graph Representation Learning. Morgan & Claypool. https://www.cs.mcgill.ca/~wlh/grl_book/files/GRL_Book.pdf
 
-11) Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
+Kalaycioglu, O., Akhanli, S. E., Mentese, E. Y., Kalaycioglu, M., & Kalaycioglu, S. (n.d.). Using machine learning algorithms to identify predictors of social vulnerability in the event of a hazard: Istanbul case study.
 
-12) Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
+Kipf, T. N., & Welling, M. (2017). Semi-supervised classification with graph convolutional networks. International Conference on Learning Representations (ICLR). https://arxiv.org/pdf/1609.02907
 
-13) Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
+Robert T. Stafford Disaster Relief and Emergency Assistance Act, 42 U.S.C. §§ 5121–5207 (1988).
+
+Russell, S. J., & Norvig, P. (2021). Artificial intelligence: A modern approach (4th ed.). Pearson. https://api.pageplace.de/preview/DT0400.9781292401171_A41586057/preview-9781292401171_A41586057.pdf
+
+Tarling, H. A. (2017). Comparative analysis of social vulnerability indices: CDC’s SVI and SoVI® [Master’s thesis, Lund University].
+
+Yedinak, J. L., Li, Y., Krieger, M. S., Howe, K., Daley Ndoye, C., Lee, H., Civitarese, A. M., Marak, T., Nelson, E., Samuels, E. A., Chan, P. A., Bertrand, T., & Marshall, B. D. L. (2021). Machine learning takes a village: Assessing neighbourhood-level vulnerability for an overdose and infectious disease outbreak. International Journal of Drug Policy, 96, 103395.
+
+Yokoyama, H., & Takefuji, Y. (2026). Unbiased evaluation of social vulnerability: A multimethod approach using machine learning and nonparametric statistics. Cities, 168, 106519.
+
+Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunara, R. (2024). Constructing social vulnerability indexes with increased data and machine learning highlight the importance of wealth across global contexts. Social Indicators Research, 175, 639–657.
