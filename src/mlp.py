@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, Optional
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def set_seed(seed: int = 42) -> None:
@@ -389,4 +390,132 @@ def evaluate_regression(
         "rmse": float(rmse),
         "mae": float(mae),
         "r2": float(r2),
+    }
+
+
+def run_mlp_experiment(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_eval: np.ndarray,
+    y_eval: np.ndarray,
+    hidden_dims: List[int],
+    dropout: float = 0.1,
+    weight_decay: float = 1e-4,
+    learning_rate: float = 1e-3,
+    max_epochs: int = 300,
+    patience: int = 25,
+    batch_size: int = 64,
+    seed: int = 42,
+    scaler_y: Optional[object] = None,
+    device: Optional[torch.device] = None,
+) -> Dict:
+    """
+    Train an MLP with the given configuration and evaluate it on a held-out split.
+
+    Inputs
+    ------
+    X_train : np.ndarray
+        Standardized training feature matrix.
+    y_train : np.ndarray
+        Standardized training targets, shape (n_samples, 1).
+    X_eval : np.ndarray
+        Standardized evaluation feature matrix (validation or test).
+    y_eval : np.ndarray
+        Standardized evaluation targets, shape (n_samples, 1).
+    hidden_dims : list[int]
+        Hidden layer widths, e.g. [64, 32].
+    dropout : float, default=0.1
+        Dropout probability applied after each hidden layer.
+    weight_decay : float, default=1e-4
+        L2 regularization strength.
+    learning_rate : float, default=1e-3
+        Optimizer learning rate.
+    max_epochs : int, default=300
+        Maximum number of training epochs.
+    patience : int, default=25
+        Early stopping patience, in epochs, based on validation loss.
+    batch_size : int, default=64
+        Mini-batch size for training and evaluation.
+    seed : int, default=42
+        Random seed for reproducibility.
+    scaler_y : fitted sklearn scaler or None, default=None
+        If provided, predictions and targets are inverse-transformed back to
+        the original scale before computing evaluation metrics, matching the
+        convention used elsewhere in this project. If None, metrics are
+        reported on the standardized scale.
+    device : torch.device or None, default=None
+        Device on which computation is performed.
+
+    Outputs
+    -------
+    dict
+        Dictionary containing the fitted model, training history, best
+        epoch/validation loss, trainable parameter count, and evaluation
+        metrics (mse, rmse, mae, r2) on the evaluation split.
+    """
+    set_seed(seed)
+
+    if device is None:
+        device = get_device()
+
+    train_loader = DataLoader(
+        TensorDataset(
+            torch.tensor(X_train, dtype=torch.float32),
+            torch.tensor(y_train, dtype=torch.float32),
+        ),
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    eval_loader = DataLoader(
+        TensorDataset(
+            torch.tensor(X_eval, dtype=torch.float32),
+            torch.tensor(y_eval, dtype=torch.float32),
+        ),
+        batch_size=batch_size,
+        shuffle=False,
+    )
+
+    model = FlexibleMLP(
+        input_dim=X_train.shape[1],
+        hidden_dims=hidden_dims,
+        output_dim=y_train.shape[1],
+        dropout=dropout,
+    )
+    optimizer = build_optimizer(
+        model=model,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay,
+    )
+    criterion = nn.MSELoss()
+
+    model, history, best_epoch, best_val_loss = train_mlp(
+        model=model,
+        train_loader=train_loader,
+        val_loader=eval_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        max_epochs=max_epochs,
+        patience=patience,
+        device=device,
+    )
+
+    y_pred = predict_mlp(model, eval_loader, device=device)
+    y_true = np.asarray(y_eval)
+
+    if scaler_y is not None:
+        y_pred = scaler_y.inverse_transform(y_pred)
+        y_true = scaler_y.inverse_transform(y_true)
+
+    metrics = evaluate_regression(y_true, y_pred)
+
+    return {
+        "model": model,
+        "history": history,
+        "best_epoch": best_epoch,
+        "best_val_loss": best_val_loss,
+        "n_params": count_parameters(model),
+        "hidden_dims": hidden_dims,
+        "dropout": dropout,
+        "weight_decay": weight_decay,
+        **metrics,
     }
