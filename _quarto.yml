@@ -8,9 +8,10 @@ book:
   chapters:
     - index.qmd
     - notebooks\01_eda.qmd
-    - notebooks\02_mlp.qmd
-    - notebooks\03_gcn.qmd
-    - notebooks\04_conclusion.qmd
+    - notebooks\02_lasso.qmd
+    - notebooks\03_mlp.qmd
+    - notebooks\04_gcn.qmd
+    - notebooks\05_conclusion.qmd
 format:
   pdf:
     output-file: svi_fema_2018_2020_report.pdf

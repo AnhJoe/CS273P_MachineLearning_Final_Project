@@ -12,6 +12,7 @@ torch
 
 # Spatial data processing
 geopandas
+libpysal
 
 # Statistical analysis
 statsmodels

@@ -12,11 +12,11 @@ import sys
 # Check if running in Google Colab
 if 'google.colab' in sys.modules:
     # Clone your repository if it hasn't been cloned yet
-    if not os.path.exists('/content/svi-fema-spatial-graph-modeling'):
-        !git clone https://github.com/AnhJoe/svi-fema-spatial-graph-modeling.git
+    if not os.path.exists('/content/svi_fema_spatial_graph_modeling'):
+        !git clone https://github.com/AnhJoe/svi_fema_spatial_graph_modeling.git
     
     # Change working directory to the project root
-    os.chdir('/content/svi-fema-spatial-graph-modeling')
+    os.chdir('/content/svi_fema_spatial_graph_modeling')
 ```
 
 ```{python}

@@ -6,8 +6,9 @@
 - [Project Contributions](#project-contributions)
 - [Methodology](#methodology)
   - [1. Exploratory Data Analysis (01\_eda.ipynb)](#1-exploratory-data-analysis-01_edaipynb)
-  - [2. Baseline Deep Learning Model (02\_mlp.ipynb)](#2-baseline-deep-learning-model-02_mlpipynb)
-  - [3. Spatial Graph Modeling (03\_gcn.ipynb)](#3-spatial-graph-modeling-03_gcnipynb)
+  - [2. Lasso Regression Baseline (02\_lasso.ipynb)](#2-lasso-regression-baseline-02_lassoipynb)
+  - [3. Baseline Deep Learning Model (03\_mlp.ipynb)](#3-baseline-deep-learning-model-03_mlpipynb)
+  - [4. Spatial Graph Modeling (04\_gcn.ipynb)](#4-spatial-graph-modeling-04_gcnipynb)
 - [Data Summary](#data-summary)
   - [Data Sources](#data-sources)
   - [Core SVI Feature Set: 15 Social Vulnerability Variables](#core-svi-feature-set-15-social-vulnerability-variables)
@@ -28,9 +29,9 @@ To incorporate geographic context, counties are represented as nodes in a spatia
 
 Finally, the project compares **tabular deep learning and graph-based models within a unified regression framework** to assess the role of spatial connectivity in disaster vulnerability modeling and determine whether geographic structure provides predictive signal beyond the socioeconomic indicators themselves.
 
-Report Summary: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.2
+Report Summary: https://github.com/AnhJoe/svi_fema_spatial_graph_modeling/releases/tag/v1.2
 
-Full Report: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.1
+Full Report: https://github.com/AnhJoe/svi_fema_spatial_graph_modeling/releases/tag/v1.1
 
 # Abstract
 
@@ -78,7 +79,19 @@ Several analyses were conducted to understand the statistical and geographic str
 - **Unsupervised Clustering & Principal Component Analysis (PCA)**  
   Analyze the variance structure of the indicators using PCA to evaluate whether a smaller set of latent components explains most of the variability in the dataset. Clustering techniques are also applied to explore whether counties naturally group into distinct vulnerability profiles based on their socioeconomic characteristics.
 
-## 2. Baseline Deep Learning Model (02_mlp.ipynb)
+## 2. Lasso Regression Baseline (02_lasso.ipynb)
+
+A **Lasso (L1-regularized linear) regression** was implemented as a non-neural baseline for predicting county-level disaster assistance outcomes using the log-transformed SVI indicators.
+
+Reasons for selecting a Lasso baseline:
+
+- Establishes a linear performance floor before evaluating nonlinear (MLP) and spatial (GCN, GAT) models
+- L1 regularization performs automatic feature selection, offering an interpretable view of which SVI indicators carry predictive signal
+- Cheap to train and tune, providing a fast sanity check on the value added by more complex architectures
+
+The regularization strength (alpha) is selected via a validation-set search, and the best-performing configuration is retrained on the full training set before final evaluation on the held-out test set.
+
+## 3. Baseline Deep Learning Model (03_mlp.ipynb)
 
 A **Multilayer Perceptron (MLP)** was implemented as a baseline model for predicting county-level disaster assistance outcomes using tabular SVI indicators.
 
@@ -90,7 +103,7 @@ Reasons for selecting an MLP baseline:
 
 The model consists of a fully connected feedforward architecture with ReLU activations, trained using the Adam optimizer and Mean Squared Error (MSE) loss.
 
-## 3. Spatial Graph Modeling (03_gcn.ipynb)
+## 4. Spatial Graph Modeling (04_gcn.ipynb)
 
 To incorporate geographic structure, counties are represented as nodes in a spatial graph constructed using **Queen contiguity adjacency**, where neighboring counties share an edge.
 
@@ -158,7 +171,7 @@ The dataset is accessed programmatically using the OpenFEMA API endpoint. The fo
 * **`fips`:** county-level FIPS geographic identifier
 * **`ihpAmount`:** total FEMA Individuals and Households Program assistance awarded for a registration
 
-Because the FEMA dataset records assistance at the individual registration level, the data are aggregated to the county level using the FIPS geographic identifier. The final modeling target is constructed by summing all `ihpAmount` values within each county across the 2018–2020 period. This produces a county-level measure of total disaster assistance received during 2018-2022, which serves as the regression target for the study's ML models. The FEMA dataset also includes county-level FIPS codes, allowing the aggregated assistance outcomes to be merged directly with the SVI dataset and county geometries. This shared geographic identifier enables the integration of socioeconomic vulnerability indicators, disaster assistance outcomes, and spatial adjacency relationships within a unified county-level dataset used for modeling.
+Because the FEMA dataset records assistance at the individual registration level, the data are aggregated to the county level using the FIPS geographic identifier. The final modeling target is constructed by summing all `ihpAmount` values within each county across the 2018–2020 period. This produces a county-level measure of total disaster assistance received during 2018-2020, which serves as the regression target for the study's ML models. The FEMA dataset also includes county-level FIPS codes, allowing the aggregated assistance outcomes to be merged directly with the SVI dataset and county geometries. This shared geographic identifier enables the integration of socioeconomic vulnerability indicators, disaster assistance outcomes, and spatial adjacency relationships within a unified county-level dataset used for modeling.
 
 # Implementation
 
@@ -184,9 +197,9 @@ Because the FEMA dataset records assistance at the individual registration level
 
 8. Changes to introduction section can be made in index.qmd
 
-9. Changes to conclusion section can be made in notebooks/04_conclusion.qmd 
+9. Changes to conclusion section can be made in notebooks/05_conclusion.qmd 
 
-Note: Google Collab users must clone the repo first before running any individual ipynb files.
+Note: Google Colab users must clone the repo first before running any individual ipynb files.
 
 ## Data Download Instructions:
 
@@ -230,9 +243,9 @@ Note: Google Collab users must clone the repo first before running any individua
 
     Note: This may take some time
 
-4. Alternatively, a zip file with all datasets can be downloaded from this release: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.0
+4. Alternatively, a zip file with all datasets can be downloaded from this release: https://github.com/AnhJoe/svi_fema_spatial_graph_modeling/releases/tag/v1.0
 
-5. Google Collab users can clone the repo and run the data import blocks in 01_eda.ipynb to download directly from a zip file of the datasets hosted on Google Drive.
+5. Google Colab users can clone the repo and run the data import blocks in 01_eda.ipynb to download directly from a zip file of the datasets hosted on Google Drive.
 
 # Meet The Team:
 

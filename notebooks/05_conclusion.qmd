@@ -64,8 +64,8 @@ Zhao, Y., Paul, R., Reid, S., Coimbra Vieira, C., Wolfe, C., Zhang, Y., & Chunar
 
 # Appendix
 
-1) Github Repository: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling
-   
-2) Alternative Dataset Download Option: https://github.com/AnhJoe/svi-fema-spatial-graph-modeling/releases/tag/v1.0
+1) Github Repository: https://github.com/AnhJoe/svi_fema_spatial_graph_modeling
+
+2) Alternative Dataset Download Option: https://github.com/AnhJoe/svi_fema_spatial_graph_modeling/releases/tag/v1.0
 
 3) U.S. SVI Publications and Use Cases / SUIT Database: https://www.atsdr.cdc.gov/place-health/php/svi/svi-publications.html
